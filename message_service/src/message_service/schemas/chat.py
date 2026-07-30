@@ -1,14 +1,9 @@
 
 
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
-
-
-class MessageResponse(BaseModel):
-    pass 
 
 
 class CreateChatRequest(BaseModel):
@@ -30,21 +25,14 @@ class ChatResponse(BaseModel):
 
 
 class GroupChat(BaseModel):
-    type: Literal["group"] = "group"
-
     id: int
-    title: str
-    participants_count: int 
-    last_message: MessageResponse
+    title: str | None
+    participants_count: int
 
 
 class PrivateChat(BaseModel):
-    type: Literal["private"] = "private"
-
     id: int
     participant: User
-    
-    last_message: MessageResponse
 
 
 class GetChatRequest(BaseModel):
@@ -62,5 +50,6 @@ class Participant(BaseModel):
 
 
 class UserChats(BaseModel):
-    chats: list[GroupChat | PrivateChat]
+    private_chats: list[PrivateChat]
+    group_chats: list[GroupChat]
     
