@@ -6,8 +6,8 @@ from src.db.database import engine
 from src.handler.auth import auth_router
 from src.core.logging import setup_logging
 from src.db.database import Base, dispose_db_engine
-from src.exceptions.auth import UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
-from src.exceptions.handler import unauthorized_handler, user_already_exsists_handler, user_not_found_handler
+from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
+from src.exceptions.handler import bad_request_handler, unauthorized_handler, user_already_exsists_handler, user_not_found_handler
 
 setup_logging()
 
@@ -25,3 +25,4 @@ app.include_router(auth_router)
 app.add_exception_handler(UserAlreadyExistsException, user_already_exsists_handler)
 app.add_exception_handler(UserNotFoundException, user_not_found_handler)
 app.add_exception_handler(UnauthorizedException, unauthorized_handler)
+app.add_exception_handler(BadRequestException, bad_request_handler)

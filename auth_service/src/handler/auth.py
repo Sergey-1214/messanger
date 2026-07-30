@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.schemas.auth import LoginRequest, RefreshTokenRequest, RegisterRequest, TokenPair, UserDTO
+from src.schemas.auth import GetUsersBatchRequest, GetUsersBatchResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, TokenPair, UserDTO
 from src.service.auth import AuthService, get_auth_service
 from src.core.security import get_access_token_payload
 
@@ -70,3 +70,12 @@ async def logout(
     current_user: uuid.UUID = Depends(get_current_user_id)
 ):
     return await service.logout(request)
+
+
+@auth_router.post("/users/batch")
+async def users_batch(
+    request: GetUsersBatchRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> GetUsersBatchResponse:
+    users = await service.users_batch(request.user_ids)
+    return GetUsersBatchResponse(users=users)
