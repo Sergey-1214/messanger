@@ -78,6 +78,14 @@ class AuthRepository:
 
         await self.session.execute(stmt)
 
+    async def users_batch(self, users_ids: set[uuid.UUID]) -> list[User]:
+        stmt = select(User)\
+                .where(User.id.in_(users_ids))
+
+        result = await self.session.execute(stmt)
+
+        return result.scalars().all()
+
 
 async def get_auth_repository(
         session: AsyncSession = Depends(get_db_session)
