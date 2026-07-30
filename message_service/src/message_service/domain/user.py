@@ -1,18 +1,17 @@
 
 from dataclasses import dataclass
 from typing import Self
-
-from message_service.models.models import ChatType
+from uuid import UUID
 
 
 @dataclass
 class User:
-    username: int
-    email: str 
+    user_id: UUID
+    username: str
 
     @classmethod
-    def from_json(data: dict[str, str]) -> Self:
-        return User(
-            username = data.get("username"), 
-            email = data.get("email")
+    def from_json(cls, data: dict) -> Self:
+        return cls(
+            user_id=UUID(str(data.get("id", data.get("user_id")))),
+            username=data["username"],
         )
