@@ -40,3 +40,10 @@ class RefreshTokenRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class GetUsersBatchRequest(BaseModel):
+    user_ids: set[uuid.UUID]
+
+class GetUsersBatchResponse(BaseModel):
+    users: list[UserDTO]
