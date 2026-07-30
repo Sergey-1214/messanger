@@ -6,10 +6,10 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.schemas.auth import LoginRequest, LogoutRequest, RefreshTokenRequest, RegisterRequest, TokenPair, User
+from src.schemas.auth import LoginRequest, LogoutRequest, RefreshTokenRequest, RegisterRequest, TokenPair, User, UserDTO
 from src.core.security import create_access_token, create_refresh_token, hash_password, hash_refresh_token, verify_password
 from src.db.database import get_db_session
-from src.exceptions.auth import UnauthorizedException, UserAlreadyExistsException
+from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException
 from src.repository.auth import AuthRepository, get_auth_repository
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,23 @@ class AuthService:
             refresh_token=refresh_token,
             refresh_token_expires_at=expires_at,
         )
-    
+
+    async def users_batch(self, users_ids: set[uuid.UUID]) -> list[UserDTO]:    
+        if len(users_ids) > 100:
+            raise BadRequestException("Too many users in batch")
+
+        users = await self.repo.users_batch(users_ids=users_ids)
+
+        users_dto = []  
+        for user in users:
+            users_dto.append(UserDTO(
+                id=user.id,
+                username=user.username,
+                email=user.email,
+                created_at=user.created_at
+            ))
+
+        return users_dto
 
 async def get_auth_service(
         repo: AuthRepository = Depends(get_auth_repository),
