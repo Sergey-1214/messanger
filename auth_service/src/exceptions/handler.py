@@ -3,7 +3,7 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
-from src.exceptions.auth import UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
+from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
 
 
 async def user_already_exsists_handler(
@@ -39,5 +39,17 @@ async def unauthorized_handler(
         content={
             "detail": "User unauthorized",
             "code": "unauthorized"
+        }
+    )
+
+async def bad_request_handler(
+        request: Request,
+        exc: BadRequestException
+):
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "detail": exc.detail,
+            "code": "bad_request"
         }
     )
