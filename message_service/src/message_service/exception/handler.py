@@ -3,7 +3,7 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
-from message_service.exception.chat import BadRequestException, ForbiddenException, UnauthorizedException
+from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
 
 
 async def unauthorized_exception(
@@ -13,6 +13,18 @@ async def unauthorized_exception(
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={"detail": exc.detail},
+    )
+
+async def user_not_found_handler(
+        request: Request,
+        exc: ChatNotFoundException,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "detail": "User not fount",
+            "code": "user_not_found"
+        }
     )
 
 async def bad_request_exception_exception(

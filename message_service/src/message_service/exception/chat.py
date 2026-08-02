@@ -28,3 +28,10 @@ class ForbiddenException(AppException):
             status_code=status.HTTP_403_FORBIDDEN, 
             detail=detail
         )
+
+class ChatNotFoundException(AppException):
+    def __init__(self, detail: str = "Chat not found"):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail
+        )
