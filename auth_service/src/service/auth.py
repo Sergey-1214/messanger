@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.schemas.auth import LoginRequest, LogoutRequest, RefreshTokenRequest, RegisterRequest, TokenPair, User, UserDTO
 from src.core.security import create_access_token, create_refresh_token, hash_password, hash_refresh_token, verify_password
 from src.db.database import get_db_session
-from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException
+from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
 from src.repository.auth import AuthRepository, get_auth_repository
 
 logger = logging.getLogger(__name__)
@@ -113,6 +113,18 @@ class AuthService:
             ))
 
         return users_dto
+
+    async def get_user_by_id(self, user_id: uuid.UUID) -> UserDTO:
+        user = await self.repo.get_user_by_id(user_id)
+        if user is None:
+            raise UserNotFoundException()
+
+        return UserDTO(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            created_at=user.created_at,
+        )
 
 async def get_auth_service(
         repo: AuthRepository = Depends(get_auth_repository),
