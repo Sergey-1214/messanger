@@ -48,8 +48,9 @@ async def create_chat(
     chat =  await user_service.create_chat(user_id, create_chat_request)
     return ChatResponse(
         users_id=create_chat_request.users_id,
-        is_group=chat.is_group,
+        type=chat.type,
         is_private=chat.is_private,
+        title=chat.title,
         created_at=chat.created_at,
     )
 
@@ -66,10 +67,10 @@ async def get_user_chats(
     )
 
 
-@router.get("/{user_id}")
+@router.get("/{chat_id}")
 async def get_chat_by_id(
-    request: GetChatRequest,
+    chat_id: int,
     user_id: UUID = Depends(get_current_user_id),
     user_service: AuthService = Depends(get_chat_service),
 ):
-    return await user_service.get_chat_by_id(id=request.id, user_id=user_id)
+    return await user_service.get_chat_by_id(id=chat_id, user_id=user_id)

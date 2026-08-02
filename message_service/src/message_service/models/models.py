@@ -9,8 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from message_service.db.db import Base
 
 class ChatType(Enum):
-    PRIVATE = 1
-    GROUP = 2
+    PRIVATE = "PRIVATE"
+    GROUP = "GROUP"
 
 class Chat(Base):
     __tablename__ = "chats"

@@ -13,7 +13,7 @@ async def user_already_exsists_handler(
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={
-            "detail": "User already exists",
+            "detail": exc.detail,
             "code": "user_already_exists"
         }
     )
@@ -25,7 +25,7 @@ async def user_not_found_handler(
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
-            "detail": "User not fount",
+            "detail": exc.detail,
             "code": "user_not_found"
         }
     )
@@ -37,7 +37,7 @@ async def unauthorized_handler(
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,
         content={
-            "detail": "User unauthorized",
+            "detail": exc.detail,
             "code": "unauthorized"
         }
     )

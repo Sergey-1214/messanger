@@ -79,3 +79,11 @@ async def users_batch(
 ) -> GetUsersBatchResponse:
     users = await service.users_batch(request.user_ids)
     return GetUsersBatchResponse(users=users)
+
+
+@auth_router.get("/users/{user_id}", response_model=UserDTO)
+async def get_user_by_id(
+    user_id: uuid.UUID,
+    service: AuthService = Depends(get_auth_service),
+) -> UserDTO:
+    return await service.get_user_by_id(user_id)

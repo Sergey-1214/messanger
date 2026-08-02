@@ -1,5 +1,6 @@
 
 
+import logging
 from uuid import UUID
 
 from fastapi import Depends
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from message_service.clients.user_client import UserClient, get_user_client
 from message_service.db.db import get_session
-from message_service.exception.chat import BadRequestException, ForbiddenException
+from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException
 from message_service.models.models import Chat, ChatType
 from message_service.repository.chat import ChatRepository, get_chat_repository
 from message_service.schemas.chat import (
@@ -19,6 +20,7 @@ from message_service.schemas.chat import (
     UserChats,
 )
 
+logger = logging.getLogger(__name__)
 
 class AuthService:
     def __init__(
@@ -38,8 +40,12 @@ class AuthService:
         if len(request.users_id) > 10000:
             raise BadRequestException("Too much users for chat")
             
-        chat = await self.repo.create_chat(users_id=request.users_id, 
-                    is_group=request.is_group, is_private=request.is_private)
+        chat = await self.repo.create_chat(
+            users_id=request.users_id,
+            chat_type=request.type,
+            is_private=request.is_private,
+            title=request.title,
+        )
 
         return chat
 
@@ -97,13 +103,20 @@ class AuthService:
             group_chats=group_chats,
         )
 
-    async def get_chat_by_id(self, id: int, user_id: UUID) -> Chat:
-        chat = self.repo.get_chat_by_id(chat_id=id)
-        if any(participant for participant in chat.chat_participants\
-                if participant.participant_id == user_id):
-            raise ForbiddenException(detail="User not in member of chat")
+    async def get_chat_by_id(self, id: int, user_id: UUID) -> GroupChat | PrivateChat:
+        chat_item = await self.repo.get_chat_by_id(chat_id=id, user_id=user_id)
+        if chat_item is None:
+            raise ChatNotFoundException("Chat not found")
 
-        return chat
+        participant = await self.user_client.get_user_by_id(user_id)
+
+        if chat_item.chat.type == ChatType.PRIVATE:
+            return PrivateChat(id=id, participant=User(
+                        user_id=participant.user_id,
+                        username=participant.username,
+                    ),)
+        elif chat_item.chat.type == ChatType.GROUP:
+            return GroupChat(id=id, title=chat_item.chat.title, participants_count=chat_item.participants_count)
 
 
 async def get_chat_service(
