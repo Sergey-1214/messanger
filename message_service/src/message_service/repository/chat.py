@@ -17,10 +17,15 @@ class ChatRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_chat(self, users_id: set[UUID], is_private: bool, is_group: bool
+    async def create_chat(
+        self,
+        users_id: set[UUID],
+        chat_type: ChatType,
+        is_private: bool,
+        title: str | None,
     ) -> Chat:
         async with self.session.begin():
-            chat = Chat(is_private=is_private, is_group=is_group)
+            chat = Chat(type=chat_type, is_private=is_private, title=title)
             self.session.add(chat)
             await self.session.flush()
 
@@ -77,12 +82,19 @@ class ChatRepository:
         return [UserChatItem(chat=chat, private_participant_id=private_participants.get(chat.id),
                               participants_count=participants_count.get(chat.id, 0)) for chat in chats]
 
-    async def get_chat_by_id(self, chat_id: int) -> Chat:
-        stmt = select(Chat).where(Chat.id == chat_id).options(selectinload(ChatParticipant))
+    async def get_chat_by_id(self, chat_id: int, user_id: UUID) -> UserChatItem | None:
+        stmt = select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.chat_participants))
 
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        chat = result.scalar_one_or_none()
+        private_participant_id = None
+        if chat.type == ChatType.PRIVATE:
+            for participant in chat.chat_participants:
+                if participant.participant_id != user_id:
+                    private_participant_id = participant.participant_id
 
+        return UserChatItem(chat=chat, private_participant_id=private_participant_id, participants_count=len(chat.chat_participants))
+        
 async def get_chat_repository(
     session: AsyncSession = Depends(get_session),
 ) -> ChatRepository:
