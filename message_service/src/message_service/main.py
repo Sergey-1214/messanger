@@ -7,6 +7,11 @@ from message_service.db.db import Base, engine
 from message_service.exception.chat import BadRequestException, ForbiddenException, UnauthorizedException
 from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception
 from message_service.router.chat import router as chat_router
+from message_service.core.logging import setup_logging
+
+
+setup_logging()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
