@@ -25,7 +25,7 @@ async def user_not_found_handler(
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
-            "detail": "User not fount",
+            "detail": exc.detail,
             "code": "user_not_found"
         }
     )
