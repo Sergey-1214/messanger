@@ -10,3 +10,4 @@ from message_service.models.models import Chat
 class UserChatItem:
     chat: Chat
     private_participant_id: UUID | None
+    participants_count: int | None

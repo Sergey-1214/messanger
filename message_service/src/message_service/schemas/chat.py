@@ -1,20 +1,34 @@
 
 
 from datetime import datetime
-from typing import Literal
+from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
-
-class MessageResponse(BaseModel):
-    pass 
+from message_service.models.models import ChatType
 
 
 class CreateChatRequest(BaseModel):
     users_id: set[UUID]
-    is_group: bool
+    type: ChatType
     is_private: bool
+    title: str | None = Field(default=None, max_length=250)
+
+    @model_validator(mode='after')
+    def check_title_group_chat(self) -> Self:
+        if self.type == ChatType.PRIVATE and self.title is not None:
+            raise ValueError("Private chat cannot have a title")
+
+        if self.type == ChatType.GROUP and (
+            self.title is None or not self.title.strip()
+        ):
+            raise ValueError("Cannot create group chat without title")
+
+        if self.title is not None:
+            self.title = self.title.strip()
+
+        return self
 
 
 class User(BaseModel):
@@ -24,27 +38,21 @@ class User(BaseModel):
 
 class ChatResponse(BaseModel):
     users_id: set[UUID]
-    is_group: bool
+    type: ChatType
     is_private: bool 
+    title: str | None
     created_at: datetime
 
 
 class GroupChat(BaseModel):
-    type: Literal["group"] = "group"
-
     id: int
-    title: str
-    participants_count: int 
-    last_message: MessageResponse
+    title: str | None
+    participants_count: int
 
 
 class PrivateChat(BaseModel):
-    type: Literal["private"] = "private"
-
     id: int
     participant: User
-    
-    last_message: MessageResponse
 
 
 class GetChatRequest(BaseModel):
@@ -62,5 +70,6 @@ class Participant(BaseModel):
 
 
 class UserChats(BaseModel):
-    chats: list[GroupChat | PrivateChat]
+    private_chats: list[PrivateChat]
+    group_chats: list[GroupChat]
     
