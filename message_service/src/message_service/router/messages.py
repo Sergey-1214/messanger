@@ -39,6 +39,23 @@ async def create_message(
     return MessageResponse.model_validate(message)
 
 
+@router.get(
+    "/{message_id}",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_message(
+    message_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    message_service: MessageService = Depends(get_message_service),
+) -> MessageResponse:
+    message = await message_service.get_message(
+        message_id=message_id,
+        user_id=user_id,
+    )
+    return MessageResponse.model_validate(message)
+
+
 @router.patch(
     "/{message_id}",
     response_model=MessageResponse,
@@ -56,4 +73,3 @@ async def update_message_content(
         content=request.content,
     )
     return MessageResponse.model_validate(message)
-
