@@ -56,6 +56,23 @@ class MessageRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_chat_messages(
+        self,
+        chat_id: int,
+        limit: int,
+        before_seq: int | None = None,
+    ) -> list[Message]:
+        stmt = select(Message).where(
+            Message.chat_id == chat_id,
+            Message.is_deleted.is_(False),
+        )
+        if before_seq is not None:
+            stmt = stmt.where(Message.seq < before_seq)
+
+        stmt = stmt.order_by(Message.seq.desc()).limit(limit)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def save_message(self, message: Message) -> Message:
         await self.session.flush()
         await self.session.refresh(message)

@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from message_service.db.db import get_session
+from message_service.dto.message import MessagePage
 from message_service.exception.chat import ChatNotFoundException, ForbiddenException
 from message_service.exception.message import MessageNotFoundException
 from message_service.models.models import Message
@@ -92,6 +93,41 @@ class MessageService:
             )
 
         return message
+
+    async def get_chat_messages(
+        self,
+        chat_id: int,
+        user_id: UUID,
+        limit: int,
+        before_seq: int | None = None,
+    ) -> MessagePage:
+        is_participant = await self.chat_repo.is_participant(
+            chat_id=chat_id,
+            user_id=user_id,
+        )
+        if not is_participant:
+            if not await self.chat_repo.chat_exists(chat_id=chat_id):
+                raise ChatNotFoundException()
+            raise ForbiddenException(
+                detail="You are not a participant of this chat"
+            )
+
+        messages = await self.message_repo.get_chat_messages(
+            chat_id=chat_id,
+            limit=limit + 1,
+            before_seq=before_seq,
+        )
+        has_next_page = len(messages) > limit
+        page_messages = messages[:limit]
+        next_cursor = (
+            page_messages[-1].seq
+            if has_next_page and page_messages
+            else None
+        )
+        return MessagePage(
+            messages=page_messages,
+            next_cursor=next_cursor,
+        )
 
 
 async def get_message_service(
