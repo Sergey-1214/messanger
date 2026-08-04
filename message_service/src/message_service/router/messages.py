@@ -3,11 +3,13 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from message_service.router.chat import get_current_user_id
 from message_service.schemas.message import (
     CreateMessageRequest,
+    MessagePageResponse,
+    MessagePagination,
     MessageResponse,
     UpdateMessageRequest,
 )
@@ -18,6 +20,13 @@ router = APIRouter(
     prefix="/messages",
     tags=["Messages"],
 )
+
+
+async def get_message_pagination(
+    limit: int = Query(default=50, ge=1, le=100),
+    before_seq: int | None = Query(default=None, ge=1),
+) -> MessagePagination:
+    return MessagePagination(limit=limit, before_seq=before_seq)
 
 
 @router.post(
@@ -37,6 +46,32 @@ async def create_message(
         content=request.content,
     )
     return MessageResponse.model_validate(message)
+
+
+@router.get(
+    "/chat/{chat_id}",
+    response_model=MessagePageResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_chat_messages(
+    chat_id: int,
+    pagination: MessagePagination = Depends(get_message_pagination),
+    user_id: UUID = Depends(get_current_user_id),
+    message_service: MessageService = Depends(get_message_service),
+) -> MessagePageResponse:
+    page = await message_service.get_chat_messages(
+        chat_id=chat_id,
+        user_id=user_id,
+        limit=pagination.limit,
+        before_seq=pagination.before_seq,
+    )
+    return MessagePageResponse(
+        messages=[
+            MessageResponse.model_validate(message)
+            for message in page.messages
+        ],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get(
