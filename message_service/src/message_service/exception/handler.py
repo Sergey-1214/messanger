@@ -15,16 +15,13 @@ async def unauthorized_exception(
         content={"detail": exc.detail},
     )
 
-async def user_not_found_handler(
+async def chat_not_found_handler(
         request: Request,
         exc: ChatNotFoundException,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
-        content={
-            "detail": "User not fount",
-            "code": "user_not_found"
-        }
+        content={"detail": exc.detail},
     )
 
 async def bad_request_exception_exception(
