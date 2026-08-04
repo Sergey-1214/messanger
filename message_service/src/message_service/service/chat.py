@@ -104,7 +104,7 @@ class AuthService:
         )
 
     async def get_chat_by_id(self, id: int, user_id: UUID) -> GroupChat | PrivateChat:
-        chat_item = await self.repo.get_chat_by_id(chat_id=id, user_id=user_id)
+        chat_item = await self.repo.get_chat_item(chat_id=id, user_id=user_id)
         if chat_item is None:
             raise ChatNotFoundException("Chat not found")
 
