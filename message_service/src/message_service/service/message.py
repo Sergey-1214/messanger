@@ -33,11 +33,11 @@ class MessageService:
             if chat is None:
                 raise ChatNotFoundException()
 
-            is_participant = await self.chat_repo.is_participant(
+            participant = await self.chat_repo.get_participant_for_update(
                 chat_id=chat_id,
                 user_id=author_id,
             )
-            if not is_participant:
+            if participant is None:
                 raise ForbiddenException(
                     detail="You are not a participant of this chat"
                 )
@@ -70,6 +70,28 @@ class MessageService:
 
             message.content = content
             return await self.message_repo.save_message(message)
+
+    async def get_message(
+        self,
+        message_id: UUID,
+        user_id: UUID,
+    ) -> Message:
+        message = await self.message_repo.get_message_by_id(
+            message_id=message_id,
+        )
+        if message is None:
+            raise MessageNotFoundException()
+
+        is_participant = await self.chat_repo.is_participant(
+            chat_id=message.chat_id,
+            user_id=user_id,
+        )
+        if not is_participant:
+            raise ForbiddenException(
+                detail="You are not a participant of this chat"
+            )
+
+        return message
 
 
 async def get_message_service(

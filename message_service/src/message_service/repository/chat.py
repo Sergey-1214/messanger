@@ -106,8 +106,20 @@ class ChatRepository:
         chat_id: int,
         user_id: UUID,
     ) -> bool:
+        stmt = select(ChatParticipant.chat_id).where(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.participant_id == user_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def get_participant_for_update(
+        self,
+        chat_id: int,
+        user_id: UUID,
+    ) -> ChatParticipant | None:
         stmt = (
-            select(ChatParticipant.chat_id)
+            select(ChatParticipant)
             .where(
                 ChatParticipant.chat_id == chat_id,
                 ChatParticipant.participant_id == user_id,
@@ -115,7 +127,7 @@ class ChatRepository:
             .with_for_update()
         )
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        return result.scalar_one_or_none()
 
     async def get_chat_item(
         self,
