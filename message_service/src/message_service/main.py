@@ -4,9 +4,10 @@ from fastapi import FastAPI
 
 
 from message_service.db.db import Base, engine
-from message_service.exception.chat import BadRequestException, ForbiddenException, UnauthorizedException
-from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception
+from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
+from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception, chat_not_found_handler
 from message_service.router.chat import router as chat_router
+from message_service.router.messages import router as messages_router
 from message_service.core.logging import setup_logging
 
 
@@ -35,7 +36,9 @@ app = FastAPI(
 )
 
 app.include_router(chat_router)
+app.include_router(messages_router)
 
 app.add_exception_handler(UnauthorizedException, unauthorized_exception)
 app.add_exception_handler(BadRequestException, bad_request_exception_exception)
 app.add_exception_handler(ForbiddenException, forbidden_exception_exception)
+app.add_exception_handler(ChatNotFoundException, chat_not_found_handler)
