@@ -101,6 +101,11 @@ class ChatRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def chat_exists(self, chat_id: int) -> bool:
+        stmt = select(Chat.id).where(Chat.id == chat_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def is_participant(
         self,
         chat_id: int,
