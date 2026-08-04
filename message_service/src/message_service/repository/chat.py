@@ -82,11 +82,50 @@ class ChatRepository:
         return [UserChatItem(chat=chat, private_participant_id=private_participants.get(chat.id),
                               participants_count=participants_count.get(chat.id, 0)) for chat in chats]
 
-    async def get_chat_by_id(self, chat_id: int, user_id: UUID) -> UserChatItem | None:
-        stmt = select(Chat).where(Chat.id == chat_id).options(selectinload(Chat.chat_participants))
+    async def get_chat_by_id(
+        self,
+        chat_id: int,
+    ) -> Chat | None:
+        stmt = (
+            select(Chat)
+            .where(Chat.id == chat_id)
+            .options(selectinload(Chat.chat_participants))
+        )
 
         result = await self.session.execute(stmt)
-        chat = result.scalar_one_or_none()
+        return result.scalar_one_or_none()
+
+    async def get_chat_for_update(self, chat_id: int) -> Chat | None:
+        """Return a chat while locking it until the transaction is complete."""
+        stmt = select(Chat).where(Chat.id == chat_id).with_for_update()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def is_participant(
+        self,
+        chat_id: int,
+        user_id: UUID,
+    ) -> bool:
+        stmt = (
+            select(ChatParticipant.chat_id)
+            .where(
+                ChatParticipant.chat_id == chat_id,
+                ChatParticipant.participant_id == user_id,
+            )
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def get_chat_item(
+        self,
+        chat_id: int,
+        user_id: UUID,
+    ) -> UserChatItem | None:
+        chat = await self.get_chat_by_id(chat_id=chat_id)
+        if chat is None:
+            return None
+
         private_participant_id = None
         if chat.type == ChatType.PRIVATE:
             for participant in chat.chat_participants:
