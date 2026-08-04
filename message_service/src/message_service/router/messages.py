@@ -6,7 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from message_service.router.chat import get_current_user_id
-from message_service.schemas.message import CreateMessageRequest, MessageResponse
+from message_service.schemas.message import (
+    CreateMessageRequest,
+    MessageResponse,
+    UpdateMessageRequest,
+)
 from message_service.service.message import MessageService, get_message_service
 
 
@@ -34,4 +38,22 @@ async def create_message(
     )
     return MessageResponse.model_validate(message)
 
+
+@router.patch(
+    "/{message_id}",
+    response_model=MessageResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def update_message_content(
+    message_id: UUID,
+    request: UpdateMessageRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    message_service: MessageService = Depends(get_message_service),
+) -> MessageResponse:
+    message = await message_service.update_message_content(
+        message_id=message_id,
+        user_id=user_id,
+        content=request.content,
+    )
+    return MessageResponse.model_validate(message)
 
