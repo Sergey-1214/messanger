@@ -129,6 +129,26 @@ class MessageService:
             next_cursor=next_cursor,
         )
 
+    async def delete_message(
+        self,
+        message_id: UUID,
+        user_id: UUID,
+    ) -> None:
+        async with self.session.begin():
+            message = await self.message_repo.get_message_for_update(
+                message_id=message_id,
+            )
+            if message is None:
+                raise MessageNotFoundException()
+
+            if message.author_id != user_id:
+                raise ForbiddenException(
+                    detail="You can only delete your own messages"
+                )
+
+            message.is_deleted = True
+            await self.message_repo.save_message(message)
+
 
 async def get_message_service(
     session: AsyncSession = Depends(get_session),
