@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from message_service.db.db import get_session
 from message_service.exception.chat import ChatNotFoundException, ForbiddenException
+from message_service.exception.message import MessageNotFoundException
 from message_service.models.models import Message
 from message_service.repository.chat import ChatRepository, get_chat_repository
 from message_service.repository.message import MessageRepository, get_message_repository
@@ -48,6 +49,27 @@ class MessageService:
                 content=content,
                 seq=chat.last_message_seq,
             )
+
+    async def update_message_content(
+        self,
+        message_id: UUID,
+        user_id: UUID,
+        content: str,
+    ) -> Message:
+        async with self.session.begin():
+            message = await self.message_repo.get_message_for_update(
+                message_id=message_id,
+            )
+            if message is None:
+                raise MessageNotFoundException()
+
+            if message.author_id != user_id:
+                raise ForbiddenException(
+                    detail="You can only edit your own messages"
+                )
+
+            message.content = content
+            return await self.message_repo.save_message(message)
 
 
 async def get_message_service(

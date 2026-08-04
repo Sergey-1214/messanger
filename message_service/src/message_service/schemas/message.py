@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class CreateMessageRequest(BaseModel):
+class MessageContentRequest(BaseModel):
     content: str = Field(max_length=10000)
 
     @model_validator(mode="after")
@@ -14,6 +14,14 @@ class CreateMessageRequest(BaseModel):
         if not self.content:
             raise ValueError("Message content cannot be empty")
         return self
+
+
+class CreateMessageRequest(MessageContentRequest):
+    pass
+
+
+class UpdateMessageRequest(MessageContentRequest):
+    pass
 
 
 class MessageResponse(BaseModel):
