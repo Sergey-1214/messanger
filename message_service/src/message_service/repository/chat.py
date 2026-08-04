@@ -87,6 +87,8 @@ class ChatRepository:
 
         result = await self.session.execute(stmt)
         chat = result.scalar_one_or_none()
+        if chat is None:
+            return None
         private_participant_id = None
         if chat.type == ChatType.PRIVATE:
             for participant in chat.chat_participants:
