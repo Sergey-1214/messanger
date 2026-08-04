@@ -37,6 +37,7 @@ class User(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    id: int
     users_id: set[UUID]
     type: ChatType
     is_private: bool 

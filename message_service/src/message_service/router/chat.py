@@ -39,7 +39,11 @@ async def get_current_user_id(request: Request):
     return user_id
     
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ChatResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_chat(
     create_chat_request: CreateChatRequest,
     user_id: UUID = Depends(get_current_user_id),   
@@ -47,6 +51,7 @@ async def create_chat(
 ) -> ChatResponse:
     chat =  await user_service.create_chat(user_id, create_chat_request)
     return ChatResponse(
+        id=chat.id,
         users_id=create_chat_request.users_id,
         type=chat.type,
         is_private=chat.is_private,
