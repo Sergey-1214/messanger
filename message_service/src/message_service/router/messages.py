@@ -108,3 +108,18 @@ async def update_message_content(
         content=request.content,
     )
     return MessageResponse.model_validate(message)
+
+
+@router.delete(
+    "/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_message(
+    message_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    message_service: MessageService = Depends(get_message_service),
+) -> None:
+    await message_service.delete_message(
+        message_id=message_id,
+        user_id=user_id,
+    )
