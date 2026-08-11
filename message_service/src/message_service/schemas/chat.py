@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 from message_service.models.models import ChatType
+from message_service.schemas.message import MessageResponse
 
 
 class CreateChatRequest(BaseModel):
@@ -49,11 +50,13 @@ class GroupChat(BaseModel):
     id: int
     title: str | None
     participants_count: int
+    last_message: MessageResponse | None = None
 
 
 class PrivateChat(BaseModel):
     id: int
     participant: User
+    last_message: MessageResponse | None = None
 
 
 class GetChatRequest(BaseModel):
