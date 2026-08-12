@@ -1,0 +1,8 @@
+venv/
+tests/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.git/
+.gitignore
