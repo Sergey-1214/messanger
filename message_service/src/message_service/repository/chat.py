@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from message_service.db.db import get_session
 from message_service.dto.chat import UserChatItem
-from message_service.models.models import Chat, ChatParticipant, ChatType
+from message_service.models.models import Chat, ChatParticipant, ChatType, Message
 
 
 
@@ -49,13 +49,16 @@ class ChatRepository:
         
         chat_result = await self.session.execute(stmt)
         chats = chat_result.scalars().all()
-        chat_ids = [chat.id for chat in chats if chat.type == ChatType.PRIVATE]
+        chat_ids = [chat.id for chat in chats]
+        private_chat_ids = [
+            chat.id for chat in chats if chat.type == ChatType.PRIVATE
+        ]
 
         private_participants: dict[int, UUID] = {}
-        if chat_ids:
+        if private_chat_ids:
             stmt = select(ChatParticipant.participant_id, ChatParticipant.chat_id).join(Chat)\
                                 .where(
-                                    ChatParticipant.chat_id.in_(chat_ids),
+                                    ChatParticipant.chat_id.in_(private_chat_ids),
                                     ChatParticipant.participant_id != user_id
                                 )
         
@@ -79,8 +82,50 @@ class ChatRepository:
             participants_count_result = await self.session.execute(stmt)
             participants_count = dict(participants_count_result.all())
 
-        return [UserChatItem(chat=chat, private_participant_id=private_participants.get(chat.id),
-                              participants_count=participants_count.get(chat.id, 0)) for chat in chats]
+        last_messages = await self._get_last_messages(chat_ids=chat_ids)
+
+        return [
+            UserChatItem(
+                chat=chat,
+                private_participant_id=private_participants.get(chat.id),
+                participants_count=participants_count.get(chat.id, 0),
+                last_message=last_messages.get(chat.id),
+            )
+            for chat in chats
+        ]
+
+    async def _get_last_messages(
+        self,
+        chat_ids: list[int],
+    ) -> dict[int, Message]:
+        if not chat_ids:
+            return {}
+
+        latest_message_seq = (
+            select(
+                Message.chat_id,
+                func.max(Message.seq).label("seq"),
+            )
+            .where(
+                Message.chat_id.in_(chat_ids),
+                Message.is_deleted.is_(False),
+            )
+            .group_by(Message.chat_id)
+            .subquery()
+        )
+        stmt = (
+            select(Message)
+            .join(
+                latest_message_seq,
+                (Message.chat_id == latest_message_seq.c.chat_id)
+                & (Message.seq == latest_message_seq.c.seq),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return {
+            message.chat_id: message
+            for message in result.scalars().all()
+        }
 
     async def get_chat_by_id(
         self,
@@ -149,7 +194,14 @@ class ChatRepository:
                 if participant.participant_id != user_id:
                     private_participant_id = participant.participant_id
 
-        return UserChatItem(chat=chat, private_participant_id=private_participant_id, participants_count=len(chat.chat_participants))
+        last_messages = await self._get_last_messages(chat_ids=[chat.id])
+
+        return UserChatItem(
+            chat=chat,
+            private_participant_id=private_participant_id,
+            participants_count=len(chat.chat_participants),
+            last_message=last_messages.get(chat.id),
+        )
         
 async def get_chat_repository(
     session: AsyncSession = Depends(get_session),

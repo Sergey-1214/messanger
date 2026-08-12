@@ -11,7 +11,7 @@ router = APIRouter(
     tags=["Chats"]
 )
 
-async def get_pagination(limit=10, offset=0):
+async def get_pagination(limit: int = 10, offset: int = 0):
     if limit > 50 or offset < 0:
         raise BadRequestException(
             detail="Bad pagination params"

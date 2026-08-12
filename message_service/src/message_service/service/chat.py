@@ -19,6 +19,7 @@ from message_service.schemas.chat import (
     User,
     UserChats,
 )
+from message_service.schemas.message import MessageResponse
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +72,18 @@ class AuthService:
         private_chats = []
         group_chats = []
         for item in chats_with_participants:
+            last_message = (
+                MessageResponse.model_validate(item.last_message)
+                if item.last_message is not None
+                else None
+            )
             if item.chat.type == ChatType.GROUP:
                 group_chats.append(
                     GroupChat(
                         id=item.chat.id,
                         title=item.chat.title,
                         participants_count=item.participants_count,
+                        last_message=last_message,
                     )
                 )
                 continue
@@ -95,6 +102,7 @@ class AuthService:
                         user_id=participant.user_id,
                         username=participant.username,
                     ),
+                    last_message=last_message,
                 )
             )
 
@@ -114,9 +122,14 @@ class AuthService:
             return PrivateChat(id=id, participant=User(
                         user_id=participant.user_id,
                         username=participant.username,
-                    ),)
+                    ), last_message=chat_item.last_message)
         elif chat_item.chat.type == ChatType.GROUP:
-            return GroupChat(id=id, title=chat_item.chat.title, participants_count=chat_item.participants_count)
+            return GroupChat(
+                id=id,
+                title=chat_item.chat.title,
+                participants_count=chat_item.participants_count,
+                last_message=chat_item.last_message,
+            )
 
 
 async def get_chat_service(
