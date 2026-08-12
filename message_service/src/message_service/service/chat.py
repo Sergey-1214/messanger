@@ -23,7 +23,7 @@ from message_service.schemas.message import MessageResponse
 
 logger = logging.getLogger(__name__)
 
-class AuthService:
+class ChatService:
     def __init__(
         self,
         session: AsyncSession,
@@ -137,4 +137,4 @@ async def get_chat_service(
     repo: ChatRepository = Depends(get_chat_repository),
     user_client: UserClient = Depends(get_user_client),
 ):
-    return AuthService(session=session, repo=repo, user_client=user_client)
+    return ChatService(session=session, repo=repo, user_client=user_client)

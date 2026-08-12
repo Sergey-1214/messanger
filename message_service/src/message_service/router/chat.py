@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from message_service.exception.chat import BadRequestException
 from message_service.schemas.chat import ChatResponse, CreateChatRequest, GetChatRequest, Pagination, UserChats
-from message_service.service.chat import AuthService, get_chat_service
+from message_service.service.chat import ChatService, get_chat_service
 
 router = APIRouter(
     prefix="/chats",
@@ -47,7 +47,7 @@ async def get_current_user_id(request: Request):
 async def create_chat(
     create_chat_request: CreateChatRequest,
     user_id: UUID = Depends(get_current_user_id),   
-    user_service: AuthService = Depends(get_chat_service)
+    user_service: ChatService = Depends(get_chat_service)
 ) -> ChatResponse:
     chat =  await user_service.create_chat(user_id, create_chat_request)
     return ChatResponse(
@@ -64,7 +64,7 @@ async def create_chat(
 async def get_user_chats(
     pagination: Pagination = Depends(get_pagination),
     user_id: UUID = Depends(get_current_user_id),
-    user_service: AuthService = Depends(get_chat_service),
+    user_service: ChatService = Depends(get_chat_service),
 ) -> UserChats:
     return await user_service.get_user_chats(
         user_id=user_id, 
@@ -76,6 +76,6 @@ async def get_user_chats(
 async def get_chat_by_id(
     chat_id: int,
     user_id: UUID = Depends(get_current_user_id),
-    user_service: AuthService = Depends(get_chat_service),
+    user_service: ChatService = Depends(get_chat_service),
 ):
     return await user_service.get_chat_by_id(id=chat_id, user_id=user_id)
