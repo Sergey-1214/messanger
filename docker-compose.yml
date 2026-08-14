@@ -35,6 +35,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/${POSTGRES_DB:-messenger}
       AUTH_SERVICE_URL: http://auth_service:8000
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-password}@rabbitmq:5672/
     ports:
       - "${MESSAGE_SERVICE_PORT:-8001}:8000"
     depends_on:
@@ -42,6 +43,8 @@ services:
         condition: service_healthy
       auth_service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   realtime_gateway:
@@ -50,12 +53,35 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       MESSAGE_SERVICE_URL: http://message_service:8000
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-password}@rabbitmq:5672/
     ports:
       - "${REALTIME_GATEWAY_PORT:-8002}:8000"
     depends_on:
       message_service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-app}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-app-password}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  rabbitmq_data:
