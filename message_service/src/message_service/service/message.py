@@ -57,9 +57,13 @@ class MessageService:
                 content=content,
                 seq=chat.last_message_seq,
             )
+
+            chat_participants = await self.chat_repo.get_chat_participants(chat_id=chat_id)
+
         message_created_event=MessageCreatedEvent(
             message=MessageCreatedPayload.model_validate(message),
-            correlation_id=request_id or uuid4()
+            chat_participants=chat_participants,
+            correlation_id=request_id or uuid4(),
         )
         await self.producer.publish(
             event=message_created_event, 

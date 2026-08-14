@@ -202,6 +202,15 @@ class ChatRepository:
             participants_count=len(chat.chat_participants),
             last_message=last_messages.get(chat.id),
         )
+
+    async def get_chat_participants(
+        self,
+        chat_id,
+    ) -> list[UUID]:
+        stmt = select(ChatParticipant.participant_id).join(Chat).where(Chat.id == chat_id)
+
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
         
 async def get_chat_repository(
     session: AsyncSession = Depends(get_session),
