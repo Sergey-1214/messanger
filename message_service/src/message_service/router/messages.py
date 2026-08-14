@@ -3,7 +3,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 
 from message_service.router.chat import get_current_user_id
 from message_service.schemas.message import (
@@ -39,11 +39,13 @@ async def create_message(
     request: CreateMessageRequest,
     user_id: UUID = Depends(get_current_user_id),
     message_service: MessageService = Depends(get_message_service),
+    request_id: UUID | None = Header(default=None, alias="X-Request-Id"),
 ) -> MessageResponse:
     message = await message_service.create_message(
         chat_id=chat_id,
         author_id=user_id,
         content=request.content,
+        request_id=request_id,
     )
     return MessageResponse.model_validate(message)
 

@@ -1,8 +1,11 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from message_service.broker.rabbitmq.names import ChatRoutingKey
+from message_service.broker.rabbitmq.producer import RabbitMQProducer, get_chat_events_producer
+from message_service.dto.events.message_created import MessageCreatedEvent, MessageCreatedPayload
 from message_service.db.db import get_session
 from message_service.dto.message import MessagePage
 from message_service.exception.chat import ChatNotFoundException, ForbiddenException
@@ -18,17 +21,21 @@ class MessageService:
         session: AsyncSession,
         chat_repo: ChatRepository,
         message_repo: MessageRepository,
+        producer: RabbitMQProducer,
     ):
         self.session = session
         self.chat_repo = chat_repo
         self.message_repo = message_repo
+        self.producer = producer
 
     async def create_message(
         self,
         chat_id: int,
         author_id: UUID,
         content: str,
+        request_id: UUID | None,
     ) -> Message:
+        #without transactional outbox
         async with self.session.begin():
             chat = await self.chat_repo.get_chat_for_update(chat_id=chat_id)
             if chat is None:
@@ -44,12 +51,22 @@ class MessageService:
                 )
 
             chat.last_message_seq += 1
-            return await self.message_repo.create_message(
+            message = await self.message_repo.create_message(
                 chat_id=chat_id,
                 author_id=author_id,
                 content=content,
                 seq=chat.last_message_seq,
             )
+        message_created_event=MessageCreatedEvent(
+            message=MessageCreatedPayload.model_validate(message),
+            correlation_id=request_id or uuid4()
+        )
+        await self.producer.publish(
+            event=message_created_event, 
+            routing_key=ChatRoutingKey.CREATE_MESSAGE,
+        )
+
+        return message
 
     async def update_message_content(
         self,
@@ -154,9 +171,11 @@ async def get_message_service(
     session: AsyncSession = Depends(get_session),
     chat_repo: ChatRepository = Depends(get_chat_repository),
     message_repo: MessageRepository = Depends(get_message_repository),
+    producer: RabbitMQProducer = Depends(get_chat_events_producer)
 ) -> MessageService:
     return MessageService(
         session=session,
         chat_repo=chat_repo,
         message_repo=message_repo,
+        producer=producer,
     )

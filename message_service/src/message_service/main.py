@@ -1,8 +1,12 @@
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 
 
+from message_service.broker.rabbitmq.connection import get_rabbitmq_connection
+from message_service.broker.rabbitmq.exchanges import declare_chat_events_exchange
+from message_service.broker.rabbitmq.producer import get_rabbitmq_producer
+from message_service.core.settings import settings
 from message_service.db.db import Base, engine
 from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
 from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception, chat_not_found_handler, message_not_found_handler
@@ -16,24 +20,24 @@ setup_logging()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-    yield 
-    await engine.dispose()
+async def lifespan(app: FastAPI):
+    async with AsyncExitStack() as stack:
+        stack.push_async_callback(engine.dispose)
 
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        broker_connection = get_rabbitmq_connection(settings.rabbitmq_url)
+        await broker_connection.connect()
+        stack.push_async_callback(broker_connection.close)
+        channel = await broker_connection.create_channel()
+        chat_events_exchange = await declare_chat_events_exchange(channel=channel)
+        chat_events_producer = get_rabbitmq_producer(chat_events_exchange)
+        app.state.chat_events_producer = chat_events_producer
+        yield 
+        
 
 app = FastAPI(
     lifespan=lifespan,
-    swagger_ui_parameters={
-        "requestInterceptor": lambda req: {
-            **req,
-            "headers": {
-                **req.get("headers", {}),
-                "X-Custom-Header": "my-static-value"
-            }
-        }
-    }
 )
 
 app.include_router(chat_router)
