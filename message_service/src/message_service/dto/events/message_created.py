@@ -25,5 +25,6 @@ class MessageCreatedEvent(BaseModel):
     )
     
     message: MessageCreatedPayload
+    chat_participants: list[UUID]
 
     correlation_id: UUID = Field(default_factory=uuid4)
