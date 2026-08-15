@@ -1,0 +1,16 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+SQLAlchemy==2.0.36
+alembic==1.14.0
+
+pydantic-settings==2.6.1 
+python-dotenv==1.0.1 
+
+asyncpg==0.31.0
+
+httpx==0.28.1
+
+aio-pika>=10.0
+
+redis==8.1.0
