@@ -57,7 +57,7 @@ class PresenceRedisScripts:
             ],
         )
 
-        return bool(result)
+        return result == 1
 
 
 def get_presence_scripts(
