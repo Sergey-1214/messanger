@@ -12,9 +12,13 @@ class PresenceStatus(StrEnum):
 
 class AddConnectionRequest(BaseModel):
     user_id: UUID
-    connection_id: UUID
+    connection_id: str
 
 
 class DisconnectRequest(BaseModel):
     user_id: UUID 
-    connection_id: UUID
+    connection_id: str
+
+class HeartBeatRequest(BaseModel):
+    user_id: UUID 
+    connection_id: str

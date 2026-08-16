@@ -2,6 +2,7 @@
 from fastapi import Depends
 
 from presence_service.core.settings import settings
+from presence_service.exception.presence import ConnectionNotFoundException
 from presence_service.repository.presence import (
     PresenceRepository,
     get_presence_repository,
@@ -9,6 +10,7 @@ from presence_service.repository.presence import (
 from presence_service.schemas.presence import (
     AddConnectionRequest,
     DisconnectRequest,
+    HeartBeatRequest,
 )
 
 
@@ -22,7 +24,7 @@ class PresenceService:
     ) -> None:
         result = await self._repository.add_connection(
             user_id=str(request.user_id),
-            connection_id=str(request.connection_id),
+            connection_id=request.connection_id,
             ttl_seconds=settings.presence_connection_ttl_seconds,
         )
 
@@ -38,7 +40,7 @@ class PresenceService:
     ) -> None:
         status_changed = await self._repository.disconnect(
             user_id=str(request.user_id),
-            connection_id=str(request.connection_id),
+            connection_id=request.connection_id,
         )
 
         if status_changed:
@@ -46,7 +48,22 @@ class PresenceService:
             pass
 
         return 
-        
+
+    async def heartbeat(
+        self,
+        request: HeartBeatRequest,
+    ) -> None:
+        result = await self._repository.heartbeat(
+            user_id=str(request.user_id),
+            connection_id=request.connection_id,
+            ttl_seconds=settings.presence_connection_ttl_seconds,
+        )
+
+        match result:
+            case result.OK:
+                return 
+            case result.CONNECTION_NOT_FOUND:
+                raise ConnectionNotFoundException(detail="Connection not found")
 
 
 def get_presence_service(
