@@ -1,16 +1,17 @@
 from time import time
-from uuid import UUID
 
 from fastapi import Depends
 from redis.asyncio import Redis
 
 from presence_service.db.redis import get_redis
-from presence_service.dto.presence import AddConnectionResult
+from presence_service.dto.presence import AddConnectionResult, HeartbeatResult
+from presence_service.repository.lua_scripts import PresenceRedisScripts, get_presence_scripts
 
 
 class PresenceRepository:
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, redis: Redis, scripts: PresenceRedisScripts) -> None:
         self._redis = redis
+        self._scripts = scripts
 
     async def add_connection(
         self,
@@ -19,7 +20,6 @@ class PresenceRepository:
         ttl_seconds: int,
     ) -> AddConnectionResult:
         user_key = f"presence:user:{user_id}:connections"
-        connection_key = f"presence:connection:{connection_id}"
 
         now = int(time())
         expires_at = now + ttl_seconds
@@ -31,12 +31,6 @@ class PresenceRepository:
                 now,
             )
 
-            pipe.set(
-                connection_key,
-                str(user_id),
-                ex=ttl_seconds,
-            )
-
             pipe.zadd(
                 user_key,
                 {
@@ -45,7 +39,7 @@ class PresenceRepository:
             )
 
             pipe.zcard(user_key)
-            _, _, added, count = await pipe.execute()
+            _, added, count = await pipe.execute()
 
         status_changed = (count == 1 and added == 1)
             
@@ -60,7 +54,6 @@ class PresenceRepository:
         connection_id: str,
     ) -> bool:
         user_key = f"presence:user:{user_id}:connections"
-        connection_key = f"presence:connection:{connection_id}"
 
         now = int(time())
         
@@ -70,7 +63,6 @@ class PresenceRepository:
                 "-inf",
                 now,
             )
-            pipe.delete(connection_key)
 
             pipe.zrem(
                 user_key,
@@ -79,14 +71,28 @@ class PresenceRepository:
 
             pipe.zcard(user_key)
 
-            removed_ttl, _, removed, count = await pipe.execute()
+            removed_expired, removed, count = await pipe.execute()
 
-        status_changed = bool(removed_ttl or removed) and count == 0
+        status_changed = bool(removed_expired or removed) and count == 0
 
         return status_changed
 
+    async def heartbeat(
+        self, 
+        user_id: str,
+        connection_id: str,
+        ttl_seconds: int,
+    ) -> HeartbeatResult:
+        result = await self._scripts.heartbeat(
+            user_id=user_id,
+            connection_id=connection_id,
+            ttl_seconds=ttl_seconds,
+        )
+
+        return HeartbeatResult(result)
 
 def get_presence_repository(
     redis: Redis = Depends(get_redis),
+    scripts: PresenceRedisScripts = Depends(get_presence_scripts),
 ) -> PresenceRepository:
-    return PresenceRepository(redis=redis)
+    return PresenceRepository(redis=redis, scripts=scripts)
