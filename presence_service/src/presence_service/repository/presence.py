@@ -58,6 +58,35 @@ class PresenceRepository:
 
         return HeartbeatResult(result)
 
+    async def get_statuses(
+        self,
+        user_ids: list[str],
+    ) -> dict[str, bool]:
+        if not user_ids:
+            return {}
+
+        redis_seconds, _ = await self._redis.time()
+        now = int(redis_seconds)
+
+        async with self._redis.pipeline(transaction=False) as pipeline:
+            for user_id in user_ids:
+                pipeline.zcount(
+                    f"presence:user:{user_id}:connections",
+                    f"({now}",
+                    "+inf",
+                )
+
+            active_connection_counts = await pipeline.execute()
+
+        return {
+            user_id: int(active_connection_count) > 0
+            for user_id, active_connection_count in zip(
+                user_ids,
+                active_connection_counts,
+                strict=True,
+            )
+        }
+
     async def expire_connections(
         self,
         batch_size: int = 100,
@@ -93,6 +122,7 @@ class PresenceRepository:
                 offline_user_ids.append(user_id)
 
         return offline_user_ids
+
 
 def get_presence_repository(
     redis: Redis = Depends(get_redis),
