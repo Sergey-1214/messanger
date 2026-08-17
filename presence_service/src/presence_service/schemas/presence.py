@@ -2,7 +2,7 @@
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PresenceStatus(StrEnum):
@@ -22,3 +22,16 @@ class DisconnectRequest(BaseModel):
 class HeartbeatRequest(BaseModel):
     user_id: UUID
     connection_id: str
+
+
+class PresenceStatusesRequest(BaseModel):
+    user_ids: set[UUID] = Field(min_length=1, max_length=500)
+
+
+class PresenceStatusItem(BaseModel):
+    user_id: UUID
+    status: PresenceStatus
+
+
+class PresenceStatusesResponse(BaseModel):
+    statuses: list[PresenceStatusItem]
