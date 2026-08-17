@@ -14,6 +14,10 @@ from presence_service.schemas.presence import (
     AddConnectionRequest,
     DisconnectRequest,
     HeartbeatRequest,
+    PresenceStatus,
+    PresenceStatusesRequest,
+    PresenceStatusesResponse,
+    PresenceStatusItem,
 )
 
 
@@ -77,6 +81,29 @@ class PresenceService:
                 return
             case result.CONNECTION_NOT_FOUND:
                 raise ConnectionNotFoundException(detail="Connection not found")
+
+    async def get_statuses(
+        self,
+        request: PresenceStatusesRequest,
+    ) -> PresenceStatusesResponse:
+        ordered_user_ids = sorted(request.user_ids, key=str)
+        online_by_user_id = await self._repository.get_statuses(
+            [str(user_id) for user_id in ordered_user_ids]
+        )
+
+        return PresenceStatusesResponse(
+            statuses=[
+                PresenceStatusItem(
+                    user_id=user_id,
+                    status=(
+                        PresenceStatus.ONLINE
+                        if online_by_user_id[str(user_id)]
+                        else PresenceStatus.OFFLINE
+                    ),
+                )
+                for user_id in ordered_user_ids
+            ]
+        )
 
 
 def get_presence_service(

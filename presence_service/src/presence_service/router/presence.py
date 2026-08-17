@@ -4,6 +4,8 @@ from presence_service.schemas.presence import (
     AddConnectionRequest,
     DisconnectRequest,
     HeartbeatRequest,
+    PresenceStatusesRequest,
+    PresenceStatusesResponse,
 )
 from presence_service.service.presence import PresenceService, get_presence_service
 
@@ -44,3 +46,14 @@ async def heartbeat(
     service: PresenceService = Depends(get_presence_service),
 ) -> None:
     return await service.heartbeat(request=request)
+
+
+@router.post(
+    "/statuses",
+    response_model=PresenceStatusesResponse,
+)
+async def get_statuses(
+    request: PresenceStatusesRequest,
+    service: PresenceService = Depends(get_presence_service),
+) -> PresenceStatusesResponse:
+    return await service.get_statuses(request=request)
