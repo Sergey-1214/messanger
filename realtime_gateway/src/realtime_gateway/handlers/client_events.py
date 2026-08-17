@@ -11,6 +11,7 @@ from realtime_gateway.connections.manager import ConnectionManager
 from realtime_gateway.schemas.websocket import (
     ClientEvent,
     CreateMessagePayload,
+    PresenceSubscriptionPayload,
     ServerEvent,
 )
 
@@ -61,6 +62,14 @@ class ClientEventHandler:
             await self._handle_create_message(user_id, connection_id, event)
             return
 
+        if event.type in {"presence.subscribe", "presence.unsubscribe"}:
+            await self._handle_presence_subscription(
+                user_id,
+                connection_id,
+                event,
+            )
+            return
+
         raise ClientEventError(
             code="unsupported_event",
             message=f"Unsupported event type: {event.type}",
@@ -100,6 +109,54 @@ class ClientEventHandler:
             type="message.create.accepted",
             request_id=event.request_id,
             payload={"message": message.model_dump(mode="json")},
+        )
+        await self.connections.send_to_connection(
+            user_id=user_id,
+            connection_id=connection_id,
+            event=accepted_event.model_dump(mode="json"),
+        )
+
+    async def _handle_presence_subscription(
+        self,
+        user_id: UUID,
+        connection_id: str,
+        event: ClientEvent,
+    ) -> None:
+        try:
+            payload = PresenceSubscriptionPayload.model_validate(event.payload)
+        except ValidationError as error:
+            raise ClientEventError(
+                code="invalid_payload",
+                message=f"Invalid {event.type} payload",
+                request_id=event.request_id,
+            ) from error
+
+        if event.type == "presence.subscribe":
+            updated = await self.connections.add_presence_subscriptions(
+                user_id=user_id,
+                connection_id=connection_id,
+                subject_ids=payload.user_ids,
+            )
+        else:
+            updated = await self.connections.remove_presence_subscriptions(
+                user_id=user_id,
+                connection_id=connection_id,
+                subject_ids=payload.user_ids,
+            )
+
+        if not updated:
+            raise ClientEventError(
+                code="connection_not_found",
+                message="WebSocket connection is no longer active",
+                request_id=event.request_id,
+            )
+
+        accepted_event = ServerEvent(
+            type=f"{event.type}.accepted",
+            request_id=event.request_id,
+            payload={
+                "user_ids": sorted(str(item) for item in payload.user_ids),
+            },
         )
         await self.connections.send_to_connection(
             user_id=user_id,
