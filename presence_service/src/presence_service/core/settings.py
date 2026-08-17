@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_max_connections: int = Field(default=50, ge=1)
     presence_connection_ttl_seconds: int = Field(default=60, ge=1)
+    rabbitmq_url: str = "amqp://app:app-password@localhost:5672/"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, status
 from presence_service.schemas.presence import (
     AddConnectionRequest,
     DisconnectRequest,
-    HeartBeatRequest,
+    HeartbeatRequest,
 )
 from presence_service.service.presence import PresenceService, get_presence_service
 
@@ -40,7 +40,7 @@ async def disconnect(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def heartbeat(
-    request: HeartBeatRequest,
+    request: HeartbeatRequest,
     service: PresenceService = Depends(get_presence_service),
 ) -> None:
     return await service.heartbeat(request=request)

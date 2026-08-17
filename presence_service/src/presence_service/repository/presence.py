@@ -1,11 +1,13 @@
-from time import time
-
 from fastapi import Depends
 from redis.asyncio import Redis
 
 from presence_service.db.redis import get_redis
 from presence_service.dto.presence import AddConnectionResult, HeartbeatResult
-from presence_service.repository.lua_scripts import PresenceRedisScripts, get_presence_scripts
+from presence_service.repository.lua_scripts import (
+    PRESENCE_USERS_NEXT_EXPIRY_KEY,
+    PresenceRedisScripts,
+    get_presence_scripts,
+)
 
 
 class PresenceRepository:
@@ -19,33 +21,17 @@ class PresenceRepository:
         connection_id: str,
         ttl_seconds: int,
     ) -> AddConnectionResult:
-        user_key = f"presence:user:{user_id}:connections"
-
-        now = int(time())
-        expires_at = now + ttl_seconds
-
-        async with self._redis.pipeline() as pipe:
-            pipe.zremrangebyscore(
-                user_key,
-                "-inf",
-                now,
+        status_changed, active_connections = (
+            await self._scripts.add_connection(
+                user_id=user_id,
+                connection_id=connection_id,
+                ttl_seconds=ttl_seconds,
             )
+        )
 
-            pipe.zadd(
-                user_key,
-                {
-                    str(connection_id): expires_at,
-                },
-            )
-
-            pipe.zcard(user_key)
-            _, added, count = await pipe.execute()
-
-        status_changed = (count == 1 and added == 1)
-            
         return AddConnectionResult(
             status_changed=status_changed,
-            active_connections=count,
+            active_connections=active_connections,
         )
 
     async def disconnect(
@@ -53,32 +39,13 @@ class PresenceRepository:
         user_id: str,
         connection_id: str,
     ) -> bool:
-        user_key = f"presence:user:{user_id}:connections"
-
-        now = int(time())
-        
-        async with self._redis.pipeline() as pipe:
-            pipe.zremrangebyscore(
-                user_key,
-                "-inf",
-                now,
-            )
-
-            pipe.zrem(
-                user_key,
-                connection_id,
-            )
-
-            pipe.zcard(user_key)
-
-            removed_expired, removed, count = await pipe.execute()
-
-        status_changed = bool(removed_expired or removed) and count == 0
-
-        return status_changed
+        return await self._scripts.disconnect(
+            user_id=user_id,
+            connection_id=connection_id,
+        )
 
     async def heartbeat(
-        self, 
+        self,
         user_id: str,
         connection_id: str,
         ttl_seconds: int,
@@ -90,6 +57,42 @@ class PresenceRepository:
         )
 
         return HeartbeatResult(result)
+
+    async def expire_connections(
+        self,
+        batch_size: int = 100,
+    ) -> list[str]:
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than zero")
+
+        redis_seconds, _ = await self._redis.time()
+        now = int(redis_seconds)
+        due_user_ids = await self._redis.zrange(
+            PRESENCE_USERS_NEXT_EXPIRY_KEY,
+            "-inf",
+            now,
+            byscore=True,
+            offset=0,
+            num=batch_size,
+        )
+
+        offline_user_ids: list[str] = []
+
+        for raw_user_id in due_user_ids:
+            user_id = (
+                raw_user_id.decode("utf-8")
+                if isinstance(raw_user_id, bytes)
+                else str(raw_user_id)
+            )
+
+            became_offline = await self._scripts.expire_connections(
+                user_id=user_id,
+            )
+
+            if became_offline:
+                offline_user_ids.append(user_id)
+
+        return offline_user_ids
 
 def get_presence_repository(
     redis: Redis = Depends(get_redis),

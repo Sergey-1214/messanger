@@ -63,6 +63,32 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  presence_service:
+    build:
+      context: ./presence_service
+    environment:
+      REDIS_URL: redis://presence_redis:6379/0
+      REDIS_MAX_CONNECTIONS: ${PRESENCE_REDIS_MAX_CONNECTIONS:-50}
+      PRESENCE_CONNECTION_TTL_SECONDS: ${PRESENCE_CONNECTION_TTL_SECONDS:-60}
+    ports:
+      - "${PRESENCE_SERVICE_PORT:-8003}:8000"
+    depends_on:
+      presence_redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  presence_redis:
+    image: redis:8-alpine
+    ports:
+      - "${PRESENCE_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
   rabbitmq:
     image: rabbitmq:4-management
     hostname: rabbitmq

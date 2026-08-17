@@ -1,4 +1,6 @@
-from time import time
+from collections.abc import Mapping
+from enum import StrEnum
+from typing import Any
 
 from fastapi import Depends
 from redis.asyncio import Redis
@@ -6,7 +8,111 @@ from redis.asyncio import Redis
 from presence_service.db.redis import get_redis
 
 
+PRESENCE_USERS_NEXT_EXPIRY_KEY = "presence:users:next-expiry"
+
+
+class ScriptName(StrEnum):
+    ADD_CONNECTION = "add_connection"
+    DISCONNECT = "disconnect"
+    HEARTBEAT = "heartbeat"
+    EXPIRE_CONNECTIONS = "expire_connections"
+
+
+_ADD_CONNECTION_SCRIPT = """
+local redis_time = redis.call("TIME")
+local now = tonumber(redis_time[1])
+local expires_at = now + tonumber(ARGV[2])
+
+redis.call(
+    "ZREMRANGEBYSCORE",
+    KEYS[1],
+    "-inf",
+    now
+)
+
+local added = redis.call(
+    "ZADD",
+    KEYS[1],
+    expires_at,
+    ARGV[1]
+)
+
+local connection_count = redis.call("ZCARD", KEYS[1])
+local min_expiry = redis.call(
+    "ZRANGE",
+    KEYS[1],
+    0,
+    0,
+    "WITHSCORES"
+)
+
+redis.call(
+    "ZADD",
+    KEYS[2],
+    min_expiry[2],
+    ARGV[3]
+)
+
+local status_changed = 0
+
+if connection_count == 1 and added == 1 then
+    status_changed = 1
+end
+
+return {status_changed, connection_count}
+"""
+
+
+_DISCONNECT_SCRIPT = """
+local redis_time = redis.call("TIME")
+local now = tonumber(redis_time[1])
+
+local removed_expired = redis.call(
+    "ZREMRANGEBYSCORE",
+    KEYS[1],
+    "-inf",
+    now
+)
+
+local removed = redis.call(
+    "ZREM",
+    KEYS[1],
+    ARGV[1]
+)
+
+local connection_count = redis.call("ZCARD", KEYS[1])
+local min_expiry = redis.call(
+    "ZRANGE",
+    KEYS[1],
+    0,
+    0,
+    "WITHSCORES"
+)
+
+if #min_expiry > 0 then
+    redis.call(
+        "ZADD",
+        KEYS[2],
+        min_expiry[2],
+        ARGV[2]
+    )
+else
+    redis.call("ZREM", KEYS[2], ARGV[2])
+end
+
+if (removed_expired > 0 or removed > 0) and connection_count == 0 then
+    return 1
+end
+
+return 0
+"""
+
+
 _HEARTBEAT_SCRIPT = """
+local redis_time = redis.call("TIME")
+local now = tonumber(redis_time[1])
+local expires_at = now + tonumber(ARGV[2])
+
 local current_expiry = redis.call(
     "ZSCORE",
     KEYS[1],
@@ -17,21 +123,166 @@ if not current_expiry then
     return 0
 end
 
-if tonumber(current_expiry) <= tonumber(ARGV[2]) then
+if tonumber(current_expiry) <= now then
     return 0
 end
 
-redis.call("ZADD", KEYS[1], ARGV[3], ARGV[1])
+redis.call("ZADD", KEYS[1], expires_at, ARGV[1])
+
+local min_expiry = redis.call(
+    "ZRANGE",
+    KEYS[1],
+    0,
+    0,
+    "WITHSCORES"
+)
+
+redis.call(
+    "ZADD",
+    KEYS[2],
+    min_expiry[2],
+    ARGV[3]
+)
+
+return 1
+"""
+
+_EXPIRE_CONNECTIONS_SCRIPT = """
+local redis_time = redis.call("TIME")
+local now = tonumber(redis_time[1])
+
+local indexed_expiry = redis.call(
+    "ZSCORE",
+    KEYS[1],
+    ARGV[1]
+)
+
+if not indexed_expiry then
+    return 0
+end
+
+if tonumber(indexed_expiry) > now then
+    return 0
+end
+
+redis.call(
+    "ZREMRANGEBYSCORE",
+    KEYS[2],
+    "-inf",
+    now
+)
+
+local next_connection = redis.call(
+    "ZRANGE",
+    KEYS[2],
+    0,
+    0,
+    "WITHSCORES"
+)
+
+if #next_connection > 0 then
+    redis.call(
+        "ZADD",
+        KEYS[1],
+        next_connection[2],
+        ARGV[1]
+    )
+
+    return 0
+end
+
+redis.call(
+    "ZREM",
+    KEYS[1],
+    ARGV[1]
+)
 
 return 1
 """
 
 
+_SCRIPT_SOURCES: dict[ScriptName, str] = {
+    ScriptName.ADD_CONNECTION: _ADD_CONNECTION_SCRIPT,
+    ScriptName.DISCONNECT: _DISCONNECT_SCRIPT,
+    ScriptName.HEARTBEAT: _HEARTBEAT_SCRIPT,
+    ScriptName.EXPIRE_CONNECTIONS: _EXPIRE_CONNECTIONS_SCRIPT,
+}
+
+
 class PresenceRedisScripts:
-    def __init__(self, redis: Redis) -> None:
-        self._heartbeat = redis.register_script(
-            _HEARTBEAT_SCRIPT
+    def __init__(
+        self,
+        redis: Redis,
+        script_sources: Mapping[ScriptName, str] | None = None,
+    ) -> None:
+        sources = (
+            _SCRIPT_SOURCES
+            if script_sources is None
+            else script_sources
         )
+
+        self._scripts = {
+            name: redis.register_script(source)
+            for name, source in sources.items()
+        }
+
+    async def _execute(
+        self,
+        name: ScriptName,
+        *,
+        keys: list[str],
+        args: list[str | int],
+    ) -> Any:
+        script = self._scripts[name]
+        return await script(keys=keys, args=args)
+
+    async def add_connection(
+        self,
+        user_id: str,
+        connection_id: str,
+        ttl_seconds: int,
+    ) -> tuple[bool, int]:
+        user_key = (
+            f"presence:user:{user_id}:connections"
+        )
+
+        status_changed, active_connections = await self._execute(
+            ScriptName.ADD_CONNECTION,
+            keys=[
+                user_key,
+                PRESENCE_USERS_NEXT_EXPIRY_KEY,
+            ],
+            args=[
+                connection_id,
+                ttl_seconds,
+                user_id,
+            ],
+        )
+
+        return status_changed == 1, int(active_connections)
+
+    async def disconnect(
+        self,
+        user_id: str,
+        connection_id: str,
+    ) -> bool:
+        user_key = (
+            f"presence:user:{user_id}:connections"
+        )
+
+        result = await self._execute(
+            ScriptName.DISCONNECT,
+            keys=[
+                user_key,
+                PRESENCE_USERS_NEXT_EXPIRY_KEY,
+            ],
+            args=[
+                connection_id,
+                user_id,
+            ],
+        )
+
+        return result == 1
 
     async def heartbeat(
         self,
@@ -43,21 +294,41 @@ class PresenceRedisScripts:
             f"presence:user:{user_id}:connections"
         )
 
-        now = int(time())
-        expires_at = now + ttl_seconds
-
-        result = await self._heartbeat(
+        result = await self._execute(
+            ScriptName.HEARTBEAT,
             keys=[
                 user_key,
+                PRESENCE_USERS_NEXT_EXPIRY_KEY,
             ],
             args=[
                 connection_id,
-                now,
-                expires_at,
+                ttl_seconds,
+                user_id,
             ],
         )
 
-        return bool(result)
+        return result == 1
+
+    async def expire_connections(
+        self,
+        user_id: str,
+    ) -> bool:
+        user_key = (
+            f"presence:user:{user_id}:connections"
+        )
+
+        result = await self._execute(
+            ScriptName.EXPIRE_CONNECTIONS,
+            keys=[
+                PRESENCE_USERS_NEXT_EXPIRY_KEY,
+                user_key,
+            ],
+            args=[
+                user_id,
+            ],
+        )
+
+        return result == 1
 
 
 def get_presence_scripts(
