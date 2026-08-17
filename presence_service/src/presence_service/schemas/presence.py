@@ -16,9 +16,9 @@ class AddConnectionRequest(BaseModel):
 
 
 class DisconnectRequest(BaseModel):
-    user_id: UUID 
+    user_id: UUID
     connection_id: str
 
-class HeartBeatRequest(BaseModel):
-    user_id: UUID 
+class HeartbeatRequest(BaseModel):
+    user_id: UUID
     connection_id: str
