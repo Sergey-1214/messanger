@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import Depends, WebSocket, WebSocketException
 
+from realtime_gateway.clients.presence_service import PresenceServiceClient
 from realtime_gateway.connections.manager import ConnectionManager
 from realtime_gateway.core.security import decode_access_token
 from realtime_gateway.core.settings import settings
@@ -15,6 +16,10 @@ def get_connections(websocket: WebSocket) -> ConnectionManager:
 
 def get_client_event_handler(websocket: WebSocket) -> ClientEventHandler:
     return websocket.app.state.client_event_handler
+
+
+def get_presence_service_client(websocket: WebSocket) -> PresenceServiceClient:
+    return websocket.app.state.presence_service_client
 
 
 def get_current_user_id(websocket: WebSocket) -> UUID:
@@ -49,3 +54,7 @@ ClientEventHandlerDep = Annotated[
     Depends(get_client_event_handler),
 ]
 CurrentUserIdDep = Annotated[UUID, Depends(get_current_user_id)]
+PresenceServiceClientDep = Annotated[
+    PresenceServiceClient,
+    Depends(get_presence_service_client),
+]
