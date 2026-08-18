@@ -6,7 +6,7 @@ from realtime_gateway.broker.rabbitmq.names import (
     ChatRoutingKey,
     PresenceRoutingKey,
 )
-from realtime_gateway.dto.events.message_created import MessageCreatedEvent
+from realtime_gateway.dto.events.message_created import MessageCreatedEvent, MessageDeletedEvent, MessageUpdatedEvent
 from realtime_gateway.dto.events.presence_status import PresenceStatusEvent
 from realtime_gateway.handlers.message_events import MessageEventsHandler
 from realtime_gateway.handlers.presence_events import PresenceEventsHandler
@@ -22,6 +22,14 @@ class EventDispatcher:
             ChatRoutingKey.CREATE_MESSAGE: (
                 MessageCreatedEvent,
                 message_handler.handle_message_created,
+            ),
+            ChatRoutingKey.UPDATE_MESSAGE: (
+                MessageUpdatedEvent,
+                message_handler.handle_message_updated,
+            ),
+            ChatRoutingKey.DELETE_MESSAGE: (
+                MessageDeletedEvent,
+                message_handler.handle_message_deleted,
             ),
             PresenceRoutingKey.STATUS_ONLINE: (
                 PresenceStatusEvent,
