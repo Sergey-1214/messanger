@@ -77,6 +77,7 @@ async def lifespan(app: FastAPI):
         app.state.presence_service_client = presence_service_client
         app.state.client_event_handler = ClientEventHandler(
             message_service_client=message_service_client,
+            presence_service_client=presence_service_client,
             connections=connections,
         )
 

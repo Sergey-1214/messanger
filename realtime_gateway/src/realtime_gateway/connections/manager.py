@@ -120,18 +120,20 @@ class ConnectionManager:
         user_id: UUID,
         connection_id: str,
         subject_ids: set[UUID],
-    ) -> bool:
+    ) -> set[UUID] | None:
         async with self._lock:
             connection = self._connections.get(user_id, {}).get(connection_id)
             if connection is None:
-                return False
+                return None
 
             new_subject_ids = subject_ids - connection.presence_subscriptions
             connection.presence_subscriptions.update(new_subject_ids)
+
             subscriber = (user_id, connection_id)
             for subject_id in new_subject_ids:
                 self._presence_subscribers[subject_id].add(subscriber)
-            return True
+
+            return new_subject_ids
 
     async def remove_presence_subscriptions(
         self,
@@ -166,7 +168,9 @@ class ConnectionManager:
         event: dict,
     ) -> int:
         async with self._lock:
-            subscribers = tuple(self._presence_subscribers.get(subject_id, ()))
+            subscribers = tuple(
+                self._presence_subscribers.get(subject_id, ())
+            )
 
         results = await asyncio.gather(
             *(
