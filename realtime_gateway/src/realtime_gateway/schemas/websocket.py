@@ -22,6 +22,10 @@ class CreateMessagePayload(BaseModel):
         return self
 
 
+class PresenceSubscriptionPayload(BaseModel):
+    user_ids: set[UUID] = Field(min_length=1, max_length=500)
+
+
 class ServerEvent(BaseModel):
     type: str
     request_id: UUID
