@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,13 +8,14 @@ from message_service.broker.rabbitmq.connection import get_rabbitmq_connection
 from message_service.broker.rabbitmq.exchanges import declare_chat_events_exchange
 from message_service.broker.rabbitmq.producer import get_rabbitmq_producer
 from message_service.core.settings import settings
-from message_service.db.db import Base, engine
+from message_service.db.db import Base, Session, engine
 from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
 from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception, chat_not_found_handler, message_not_found_handler
 from message_service.exception.message import MessageNotFoundException
 from message_service.router.chat import router as chat_router
 from message_service.router.messages import router as messages_router
 from message_service.core.logging import setup_logging
+from message_service.service.outbox import OutboxPublisher
 
 
 setup_logging()
@@ -32,8 +34,23 @@ async def lifespan(app: FastAPI):
         channel = await broker_connection.create_channel()
         chat_events_exchange = await declare_chat_events_exchange(channel=channel)
         chat_events_producer = get_rabbitmq_producer(chat_events_exchange)
-        app.state.chat_events_producer = chat_events_producer
-        yield 
+        outbox_publisher = OutboxPublisher(
+            session_factory=Session,
+            producer=chat_events_producer,
+            poll_interval_seconds=settings.outbox_poll_interval_seconds,
+            batch_size=settings.outbox_batch_size,
+            retry_base_seconds=settings.outbox_retry_base_seconds,
+            retry_max_seconds=settings.outbox_retry_max_seconds,
+        )
+        publisher_task = asyncio.create_task(
+            outbox_publisher.run(),
+            name="outbox-publisher",
+        )
+        try:
+            yield
+        finally:
+            outbox_publisher.stop()
+            await publisher_task
         
 
 app = FastAPI(

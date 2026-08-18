@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from realtime_gateway.broker.rabbitmq.names import ChatRoutingKey
+
 
 class MessageCreatedPayload(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -22,7 +24,19 @@ class BaseEvent(BaseModel):
     occurred_at: datetime
     correlation_id: UUID
 
-class MessageCreatedEvent(BaseEvent):
-    event_type: Literal["chat.message.created"]
+class MessageEvent(BaseEvent):
+    event_type: ChatRoutingKey
     message: MessageCreatedPayload
     chat_participants: list[UUID]
+
+
+class MessageCreatedEvent(MessageEvent):
+    event_type: Literal["chat.message.created"]
+    
+
+class MessageUpdatedEvent(MessageEvent):
+    event_type: Literal["chat.message.updated"]
+
+
+class MessageDeletedEvent(MessageEvent): 
+    event_type: Literal["chat.message.deleted"]
