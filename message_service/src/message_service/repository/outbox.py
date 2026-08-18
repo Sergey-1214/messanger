@@ -66,7 +66,7 @@ class OutboxRepository:
         event.next_attempt_at = datetime.now(timezone.utc) + timedelta(
             seconds=delay_seconds,
         )
-        event.last_error = str(error)[:4000]
+        event.last_error = str(error)[:500]
 
 
 async def get_outbox_repository(
