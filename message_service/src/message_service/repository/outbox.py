@@ -32,7 +32,7 @@ class OutboxRepository:
         return outbox_event
 
     async def get_next_pending_for_update(self) -> OutboxEvent | None:
-        statement = (
+        stmt = (
             select(OutboxEvent)
             .where(
                 OutboxEvent.published_at.is_(None),
@@ -42,7 +42,7 @@ class OutboxRepository:
             .limit(1)
             .with_for_update(skip_locked=True)
         )
-        result = await self.session.execute(statement)
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
