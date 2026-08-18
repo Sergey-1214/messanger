@@ -103,11 +103,13 @@ async def update_message_content(
     request: UpdateMessageRequest,
     user_id: UUID = Depends(get_current_user_id),
     message_service: MessageService = Depends(get_message_service),
+    request_id: UUID | None = Header(default=None, alias="X-Request-Id"),
 ) -> MessageResponse:
     message = await message_service.update_message_content(
         message_id=message_id,
         user_id=user_id,
         content=request.content,
+        request_id=request_id,
     )
     return MessageResponse.model_validate(message)
 
@@ -120,8 +122,10 @@ async def delete_message(
     message_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
     message_service: MessageService = Depends(get_message_service),
+    request_id: UUID | None = Header(default=None, alias="X-Request-Id"),
 ) -> None:
     await message_service.delete_message(
         message_id=message_id,
         user_id=user_id,
+        request_id=request_id,
     )

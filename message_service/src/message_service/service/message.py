@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from message_service.broker.rabbitmq.names import ChatRoutingKey
-from message_service.dto.events.message_created import MessageCreatedEvent, MessageCreatedPayload
+from message_service.dto.events.message_created import MessageCreatedEvent, MessageDeletedEvent, MessagePayload, MessageUpdatedEvent
 from message_service.db.db import get_session
 from message_service.dto.message import MessagePage
 from message_service.exception.chat import ChatNotFoundException, ForbiddenException
@@ -61,7 +61,7 @@ class MessageService:
                 chat_id=chat_id,
             )
             message_created_event = MessageCreatedEvent(
-                message=MessageCreatedPayload.model_validate(message),
+                message=MessagePayload.model_validate(message),
                 chat_participants=chat_participants,
                 correlation_id=request_id or uuid4(),
             )
@@ -77,6 +77,7 @@ class MessageService:
         message_id: UUID,
         user_id: UUID,
         content: str,
+        request_id: UUID,
     ) -> Message:
         async with self.session.begin():
             message = await self.message_repo.get_message_for_update(
@@ -91,7 +92,22 @@ class MessageService:
                 )
 
             message.content = content
-            return await self.message_repo.save_message(message)
+            updated_message = await self.message_repo.save_message(message)
+
+            chat_participants = await self.chat_repo.get_chat_participants(
+                chat_id=updated_message.chat_id,
+            )
+            message_updated_event = MessageUpdatedEvent(
+                message=MessagePayload.model_validate(updated_message),
+                chat_participants=chat_participants,
+                correlation_id=request_id or uuid4(),
+            )
+            await self.outbox_repo.add(
+                event=message_updated_event,
+                routing_key=ChatRoutingKey.UPDATE_MESSAGE,
+            )
+
+        return updated_message
 
     async def get_message(
         self,
@@ -154,6 +170,7 @@ class MessageService:
         self,
         message_id: UUID,
         user_id: UUID,
+        request_id: UUID,
     ) -> None:
         async with self.session.begin():
             message = await self.message_repo.get_message_for_update(
@@ -168,7 +185,20 @@ class MessageService:
                 )
 
             message.is_deleted = True
-            await self.message_repo.save_message(message)
+            deleted_message = await self.message_repo.save_message(message)
+            
+            chat_participants = await self.chat_repo.get_chat_participants(
+                chat_id=deleted_message.chat_id,
+            )
+            message_deleted_event = MessageDeletedEvent(
+                message=MessagePayload.model_validate(deleted_message),
+                chat_participants=chat_participants,
+                correlation_id=request_id or uuid4(),
+            )
+            await self.outbox_repo.add(
+                event=message_deleted_event,
+                routing_key=ChatRoutingKey.DELETE_MESSAGE,
+            )
 
 
 async def get_message_service(
