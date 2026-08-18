@@ -7,10 +7,15 @@ from realtime_gateway.clients.message_service import (
     MessageServiceClient,
     MessageServiceError,
 )
+from realtime_gateway.clients.presence_service import (
+    PresenceServiceClient,
+    PresenceServiceError,
+)
 from realtime_gateway.connections.manager import ConnectionManager
 from realtime_gateway.schemas.websocket import (
     ClientEvent,
     CreateMessagePayload,
+    PresenceSubscriptionPayload,
     ServerEvent,
 )
 
@@ -32,9 +37,11 @@ class ClientEventHandler:
     def __init__(
         self,
         message_service_client: MessageServiceClient,
+        presence_service_client: PresenceServiceClient,
         connections: ConnectionManager,
     ) -> None:
         self.message_service_client = message_service_client
+        self.presence_service_client = presence_service_client
         self.connections = connections
 
     async def handle(
@@ -59,6 +66,14 @@ class ClientEventHandler:
 
         if event.type == "message.create":
             await self._handle_create_message(user_id, connection_id, event)
+            return
+
+        if event.type in {"presence.subscribe", "presence.unsubscribe"}:
+            await self._handle_presence_subscription(
+                user_id,
+                connection_id,
+                event,
+            )
             return
 
         raise ClientEventError(
@@ -100,6 +115,101 @@ class ClientEventHandler:
             type="message.create.accepted",
             request_id=event.request_id,
             payload={"message": message.model_dump(mode="json")},
+        )
+        await self.connections.send_to_connection(
+            user_id=user_id,
+            connection_id=connection_id,
+            event=accepted_event.model_dump(mode="json"),
+        )
+
+    async def _handle_presence_subscription(
+        self,
+        user_id: UUID,
+        connection_id: str,
+        event: ClientEvent,
+    ) -> None:
+        try:
+            payload = PresenceSubscriptionPayload.model_validate(event.payload)
+        except ValidationError as error:
+            raise ClientEventError(
+                code="invalid_payload",
+                message=f"Invalid {event.type} payload",
+                request_id=event.request_id,
+            ) from error
+
+        if event.type == "presence.subscribe":
+            new_subject_ids = (
+                await self.connections.add_presence_subscriptions(
+                    user_id=user_id,
+                    connection_id=connection_id,
+                    subject_ids=payload.user_ids,
+                )
+            )
+            if new_subject_ids is None:
+                raise ClientEventError(
+                    code="connection_not_found",
+                    message="WebSocket connection is no longer active",
+                    request_id=event.request_id,
+                )
+
+            try:
+                statuses = await self.presence_service_client.get_statuses(
+                    payload.user_ids
+                )
+            except PresenceServiceError as error:
+                await self.connections.remove_presence_subscriptions(
+                    user_id=user_id,
+                    connection_id=connection_id,
+                    subject_ids=new_subject_ids,
+                )
+                raise ClientEventError(
+                    code="presence_service_unavailable",
+                    message="Presence service is unavailable",
+                    request_id=event.request_id,
+                ) from error
+
+            accepted_event = ServerEvent(
+                type="presence.subscribe.accepted",
+                request_id=event.request_id,
+                payload={
+                    "user_ids": sorted(str(item) for item in payload.user_ids),
+                    "statuses": [
+                        item.model_dump(mode="json")
+                        for item in statuses.statuses
+                    ],
+                },
+            )
+            sent = await self.connections.send_to_connection(
+                user_id=user_id,
+                connection_id=connection_id,
+                event=accepted_event.model_dump(mode="json"),
+            )
+            if not sent:
+                raise ClientEventError(
+                    code="connection_not_found",
+                    message="WebSocket connection is no longer active",
+                    request_id=event.request_id,
+                )
+            return
+
+        updated = await self.connections.remove_presence_subscriptions(
+            user_id=user_id,
+            connection_id=connection_id,
+            subject_ids=payload.user_ids,
+        )
+        if not updated:
+            raise ClientEventError(
+                code="connection_not_found",
+                message="WebSocket connection is no longer active",
+                request_id=event.request_id,
+            )
+
+        accepted_event = ServerEvent(
+            type="presence.unsubscribe.accepted",
+            request_id=event.request_id,
+            payload={
+                "user_ids": sorted(str(item) for item in payload.user_ids),
+            },
         )
         await self.connections.send_to_connection(
             user_id=user_id,
