@@ -16,8 +16,19 @@ class AuthRepository:
     def __init__(self, session: AsyncSession = Depends(get_db_session)):
         self.session = session
 
-    async def register(self, username: str, email: str, hashed_password: str) -> User:
-        user = User(username=username, email=email, password_hash=hashed_password)
+    async def register(
+        self,
+        user_id: uuid.UUID,
+        username: str,
+        email: str,
+        hashed_password: str,
+    ) -> User:
+        user = User(
+            id=user_id,
+            username=username,
+            email=email,
+            password_hash=hashed_password,
+        )
         self.session.add(user)
         await self.session.flush()
         await self.session.refresh(user)
