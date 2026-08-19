@@ -1,6 +1,4 @@
 import logging
-import sys
-
 
 def setup_logging() -> None:
     logging.basicConfig(
