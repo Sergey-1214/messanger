@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from user_service.schemas.user import CreateUserRequest, User
+from user_service.schemas.user import CreateUserRequest, UpdateUserRequest, User
 from user_service.service.user import UserService, get_user_service
 
 
@@ -44,3 +44,15 @@ async def get_user_by_username(
     service: UserService = Depends(get_user_service),
 ) -> User:
     return await service.get_user_by_username(username=username)
+
+
+@router.put(
+    "/{user_id}",
+    status_code=status.HTTP_200_OK,
+)
+async def update_user(
+    user_id: UUID,
+    request: UpdateUserRequest, 
+    service: UserService = Depends(get_user_service),
+) -> User:
+    return await service.update_user(id=user_id, request=request)
