@@ -2,14 +2,27 @@ import logging
 from typing import AsyncGenerator
 import uuid
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.client.user import (
+    UserClient,
+    UserClientConnectionError,
+    UserClientResponseError,
+    get_user_client,
+)
 from src.schemas.auth import LoginRequest, LogoutRequest, RefreshTokenRequest, RegisterRequest, TokenPair, User, UserDTO
 from src.core.security import create_access_token, create_refresh_token, hash_password, hash_refresh_token, verify_password
 from src.db.database import get_db_session
-from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
+from src.exceptions.auth import (
+    BadRequestException,
+    UnauthorizedException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
+    UserServiceException,
+    UserServiceUnavailableException,
+)
 from src.repository.auth import AuthRepository, get_auth_repository
 
 logger = logging.getLogger(__name__)
@@ -17,28 +30,50 @@ logger = logging.getLogger(__name__)
 class AuthService:
     def __init__(self, 
         repo: AuthRepository = Depends(get_auth_repository), 
-        session: AsyncSession = Depends(get_db_session)
+        session: AsyncSession = Depends(get_db_session),
+        client: UserClient = Depends(get_user_client)
     ):
         self.repo = repo
         self.session = session
+        self.client = client
 
 
     async def register(self, request: RegisterRequest) -> User:
+        user_id = uuid.uuid4()
         hashed_password = hash_password(password=request.password.get_secret_value())
         try:
             user = await self.repo.register(
+                user_id=user_id,
                 username=request.username, 
                 email=request.email,
                 hashed_password=hashed_password
             )
-            await self.session.commit()
+
         except IntegrityError as exc:
             await self.session.rollback()
             raise UserAlreadyExistsException(
                 email=request.email, 
                 username=request.username
             ) from exc
-        
+        try:
+            await self.client.create_user(
+                user_id=user_id,
+                username=request.username,
+                email=request.email,
+            )
+        except UserClientResponseError as exc:
+            await self.session.rollback()
+            if exc.status_code == 409:
+                raise UserAlreadyExistsException(
+                    email=request.email,
+                    username=request.username
+                ) from exc
+            raise UserServiceException() from exc
+        except UserClientConnectionError as exc:
+            await self.session.rollback()
+            raise UserServiceUnavailableException() from exc
+
+        await self.session.commit()
         return user
     
     
@@ -128,9 +163,11 @@ class AuthService:
 
 async def get_auth_service(
         repo: AuthRepository = Depends(get_auth_repository),
-        session: AsyncSession = Depends(get_db_session)
+        session: AsyncSession = Depends(get_db_session),
+        client: UserClient = Depends(get_user_client),
 ) -> AsyncGenerator[AuthService, None]:
     yield AuthService(
         repo=repo,
-        session=session
+        session=session,
+        client=client,
     )
