@@ -10,4 +10,8 @@ class UserException(Exception):
 class UserAlreadyExistException(UserException):
     def __init__(self, detail: str):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
-        
+
+
+class UserNotFoundException(UserException):
+    def __init__(self, detail):
+        super().__init__(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
