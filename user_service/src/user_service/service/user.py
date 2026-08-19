@@ -11,7 +11,7 @@ from user_service.db.db import get_db_session
 from user_service.exceptions.user import UserAlreadyExistException, UserNotFoundException
 from user_service.repository.settings import SettingsRepository, get_settings_repository
 from user_service.repository.user import UserRepository, get_user_repository
-from user_service.schemas.user import CreateUserRequest, User
+from user_service.schemas.user import CreateUserRequest, UpdateUserRequest, User
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,27 @@ class UserService:
             raise UserNotFoundException(detail="User not found")
 
         return User.model_validate(user)
-    
+
+    async def update_user(self, id: UUID, request: UpdateUserRequest) -> User:
+        try:
+            user = await self.user_repository.update_user(
+                id=id,
+                username=request.username,
+                email=request.email,
+                description=request.description,
+                first_name=request.first_name,
+                second_name=request.second_name,
+            )
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise UserAlreadyExistException(detail="User already exist") from exc
+
+        if user is None:
+            await self.session.rollback()
+            raise UserNotFoundException(detail="User not found")
+
+        await self.session.commit()
+        return User.model_validate(user)
 
 def get_user_service(
     session: AsyncSession = Depends(get_db_session),
