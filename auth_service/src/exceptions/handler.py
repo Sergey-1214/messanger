@@ -1,55 +1,19 @@
 
 
-from fastapi import Request, status
+from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from src.exceptions.auth import BadRequestException, UnauthorizedException, UserAlreadyExistsException, UserNotFoundException
+from src.exceptions.auth import AppException
 
 
-async def user_already_exsists_handler(
+async def app_exception_handler(
     request: Request,
-    exc: UserAlreadyExistsException,
+    exc: AppException,
 ) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
+        status_code=exc.status_code,
         content={
             "detail": exc.detail,
-            "code": "user_already_exists"
-        }
-    )
-
-async def user_not_found_handler(
-        request: Request,
-        exc: UserNotFoundException,
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=status.HTTP_404_NOT_FOUND,
-        content={
-            "detail": exc.detail,
-            "code": "user_not_found"
-        }
-    )
-
-async def unauthorized_handler(
-    request: Request,
-    exc: UnauthorizedException
-):
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={
-            "detail": exc.detail,
-            "code": "unauthorized"
-        }
-    )
-
-async def bad_request_handler(
-        request: Request,
-        exc: BadRequestException
-):
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "detail": exc.detail,
-            "code": "bad_request"
-        }
+            "code": exc.code,
+        },
     )
