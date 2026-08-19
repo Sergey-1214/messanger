@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class CreateUserRequest(BaseModel):
+    id: UUID
     username: str = Field(min_length=2, max_length=100)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     second_name: str | None = Field(default=None, min_length=1, max_length=100)

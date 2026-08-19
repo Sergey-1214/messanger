@@ -29,6 +29,7 @@ class UserService:
     async def create_user(self, request: CreateUserRequest) -> User:
         try:
             user = await self.user_repository.create_user(
+                user_id=request.id,
                 username=request.username, 
                 email=request.email, 
                 description=request.description,

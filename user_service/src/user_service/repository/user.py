@@ -13,6 +13,7 @@ class UserRepository:
 
     async def create_user(
         self, 
+        user_id: UUID,
         username: str, 
         email: str, 
         description: str | None, 
@@ -20,6 +21,7 @@ class UserRepository:
         second_name: str | None,
     ) -> User:
         user = User(
+            id=user_id,
             username=username,
             email=email, 
             description=description,
