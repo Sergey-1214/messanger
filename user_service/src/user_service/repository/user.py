@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from user_service.db.db import get_db_session
@@ -45,6 +45,28 @@ class UserRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def update_user(
+        self, 
+        id: UUID,
+        username: str, 
+        email: str, 
+        description: str | None, 
+        first_name: str | None,
+        second_name: str | None,
+    ) -> User | None:
+        stmt = update(User)\
+                .where(User.id == id)\
+                .values(
+                    username=username,
+                    email=email,
+                    description=description,
+                    first_name=first_name,
+                    second_name=second_name,
+                ).returning(User)
+
+        result = await self.session.execute(stmt)
+        
+        return result.scalar_one_or_none()        
 
 
 def get_user_repository(
