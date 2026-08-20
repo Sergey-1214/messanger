@@ -27,6 +27,12 @@ class ChatType(Enum):
     PRIVATE = "PRIVATE"
     GROUP = "GROUP"
 
+
+class ParticipantRole(Enum):
+    PARTICIPANT = "participant"
+    ADMIN = "admin"
+
+
 class Chat(Base):
     __tablename__ = "chats"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -83,6 +89,7 @@ class ChatParticipant(Base):
     )
     participant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
 
+    role: Mapped[str] = mapped_column(String(50), nullable=False, default="participant")
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
