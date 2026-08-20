@@ -93,3 +93,16 @@ async def add_chat_participants(
     user_service: ChatService = Depends(get_chat_service),
 ):
     return await user_service.add_chat_participant(chat_id=chat_id, user_id=user_id, participant_ids=request.participant_ids)
+
+
+@router.delete(
+    "/{chat_id}/participants/{participant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_chat_participant(
+    chat_id: int,
+    participant_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    user_service: ChatService = Depends(get_chat_service),
+):
+    await user_service.delete_chat_participant(chat_id=chat_id, user_id=user_id, participant_id=participant_id)
