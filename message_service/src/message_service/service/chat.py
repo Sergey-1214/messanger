@@ -13,6 +13,8 @@ from message_service.models.models import Chat, ChatType
 from message_service.repository.chat import ChatRepository, get_chat_repository
 from message_service.schemas.chat import (
     CreateChatRequest,
+    AddChatParticipantError,
+    AddChatParticipantsResponse,
     GroupChat,
     Pagination,
     PrivateChat,
@@ -129,6 +131,48 @@ class ChatService:
                 title=chat_item.chat.title,
                 participants_count=chat_item.participants_count,
                 last_message=chat_item.last_message,
+            )
+
+    async def add_chat_participant(
+        self,
+        chat_id: int,
+        user_id: UUID,
+        participant_ids: set[UUID],
+    ) -> AddChatParticipantsResponse:
+        async with self.session.begin():
+            chat = await self.repo.get_chat_by_id(chat_id=chat_id)
+            if chat is None:
+                raise ChatNotFoundException("Chat not found")
+
+            if chat.type == ChatType.PRIVATE:
+                raise BadRequestException("Cannot add participants to a private chat")
+
+            if not await self.repo.is_chat_admin(chat_id=chat_id, user_id=user_id):
+                raise ForbiddenException("You are not an admin of this chat")
+
+            existing_participant_ids = set(
+                await self.repo.get_chat_participants(chat_id=chat_id)
+            )
+            added_ids = participant_ids - existing_participant_ids
+            errors = [
+                AddChatParticipantError(
+                    user_id=participant_id,
+                    detail="User is already a participant of the chat",
+                )
+                for participant_id in sorted(
+                    participant_ids & existing_participant_ids
+                )
+            ]
+
+            if added_ids:
+                await self.repo.add_chat_participants(
+                    chat_id=chat_id,
+                    user_ids=added_ids,
+                )
+
+            return AddChatParticipantsResponse(
+                added=sorted(added_ids),
+                errors=errors,
             )
 
 
