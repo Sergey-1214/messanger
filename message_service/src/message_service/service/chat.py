@@ -44,6 +44,7 @@ class ChatService:
             raise BadRequestException("Too much users for chat")
             
         chat = await self.repo.create_chat(
+            creator_id=user_id,
             users_id=request.users_id,
             chat_type=request.type,
             is_private=request.is_private,
@@ -147,8 +148,16 @@ class ChatService:
             if chat.type == ChatType.PRIVATE:
                 raise BadRequestException("Cannot add participants to a private chat")
 
-            if not await self.repo.is_chat_admin(chat_id=chat_id, user_id=user_id):
-                raise ForbiddenException("You are not an admin of this chat")
+            is_admin = await self.repo.is_chat_admin(
+                chat_id=chat_id,
+                user_id=user_id,
+            )
+            is_creator = await self.repo.is_chat_creator(
+                chat_id=chat_id,
+                user_id=user_id,
+            )
+            if not (is_admin or is_creator):
+                raise ForbiddenException("You are not an admin or creator of this chat")
 
             existing_participant_ids = set(
                 await self.repo.get_chat_participants(chat_id=chat_id)
@@ -173,6 +182,57 @@ class ChatService:
             return AddChatParticipantsResponse(
                 added=sorted(added_ids),
                 errors=errors,
+            )
+
+    async def delete_chat_participant(
+        self,
+        chat_id: int,
+        user_id: UUID,
+        participant_id: UUID,
+    ) -> None:
+        async with self.session.begin():
+            chat = await self.repo.get_chat_by_id(chat_id=chat_id)
+            if chat is None:
+                raise ChatNotFoundException("Chat not found")
+
+            if chat.type == ChatType.PRIVATE:
+                raise BadRequestException("Cannot remove participants from a private chat")
+
+            is_admin = await self.repo.is_chat_admin(
+                chat_id=chat_id,
+                user_id=user_id,
+            )
+            is_creator = await self.repo.is_chat_creator(
+                chat_id=chat_id,
+                user_id=user_id,
+            )
+            if not (is_admin or is_creator):
+                raise ForbiddenException("You are not an admin or creator of this chat")
+
+            if await self.repo.is_chat_creator(
+                chat_id=chat_id,
+                user_id=participant_id,
+            ):
+                raise BadRequestException("Cannot remove the creator of the chat")
+
+            if (
+                await self.repo.is_chat_admin(
+                    chat_id=chat_id,
+                    user_id=participant_id,
+                )
+                and not is_creator
+            ):
+                raise ForbiddenException("You cannot remove another admin from the chat")
+
+            existing_participant_ids = set(
+                await self.repo.get_chat_participants(chat_id=chat_id)
+            )
+            if participant_id not in existing_participant_ids:
+                raise BadRequestException("User is not a participant of the chat")
+
+            await self.repo.delete_chat_participant(
+                chat_id=chat_id,
+                participant_id=participant_id,
             )
 
 
