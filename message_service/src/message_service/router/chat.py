@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from message_service.exception.chat import BadRequestException
-from message_service.schemas.chat import ChatResponse, CreateChatRequest, GetChatRequest, Pagination, UserChats
+from message_service.schemas.chat import AddChatParticipantsRequest, AddChatParticipantsResponse, ChatResponse, CreateChatRequest, GetChatRequest, Pagination, UserChats
 from message_service.service.chat import ChatService, get_chat_service
 
 router = APIRouter(
@@ -79,3 +79,17 @@ async def get_chat_by_id(
     user_service: ChatService = Depends(get_chat_service),
 ):
     return await user_service.get_chat_by_id(id=chat_id, user_id=user_id)
+
+
+@router.post(
+    "/{chat_id}/participants",
+    response_model=AddChatParticipantsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def add_chat_participants(
+    chat_id: int,
+    request: AddChatParticipantsRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    user_service: ChatService = Depends(get_chat_service),
+):
+    return await user_service.add_chat_participant(chat_id=chat_id, user_id=user_id, participant_ids=request.participant_ids)

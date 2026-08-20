@@ -163,6 +163,19 @@ class ChatRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def is_chat_admin(
+        self,
+        chat_id: int,
+        user_id: UUID,
+    ) -> bool:
+        stmt = select(ChatParticipant.chat_id).where(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.participant_id == user_id,
+            ChatParticipant.role == "admin",
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
     async def get_participant_for_update(
         self,
         chat_id: int,
@@ -211,6 +224,22 @@ class ChatRepository:
 
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def add_chat_participants(
+        self,
+        chat_id: int,
+        user_ids: set[UUID],
+    ) -> list[ChatParticipant]:
+        participants = []
+        for user_id in user_ids:
+            participant = ChatParticipant(
+                chat_id=chat_id,
+                participant_id=user_id,
+            )
+            participants.append(participant)
+        self.session.add_all(participants)
+        await self.session.flush()
+        return participants
         
 async def get_chat_repository(
     session: AsyncSession = Depends(get_session),

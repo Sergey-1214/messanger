@@ -77,3 +77,16 @@ class UserChats(BaseModel):
     private_chats: list[PrivateChat]
     group_chats: list[GroupChat]
     
+
+class AddChatParticipantsRequest(BaseModel):
+    participant_ids: set[UUID] = Field(..., min_items=1, max_items=100)
+
+
+class AddChatParticipantError(BaseModel):
+    user_id: UUID
+    detail: str
+
+
+class AddChatParticipantsResponse(BaseModel):
+    added: list[UUID]
+    errors: list[AddChatParticipantError]
