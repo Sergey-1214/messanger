@@ -3,13 +3,13 @@
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from message_service.db.db import get_session
 from message_service.dto.chat import UserChatItem
-from message_service.models.models import Chat, ChatParticipant, ChatType, Message
+from message_service.models.models import Chat, ChatParticipant, ChatType, Message, ParticipantRole
 
 
 
@@ -19,6 +19,7 @@ class ChatRepository:
 
     async def create_chat(
         self,
+        creator_id: UUID,
         users_id: set[UUID],
         chat_type: ChatType,
         is_private: bool,
@@ -33,6 +34,11 @@ class ChatRepository:
                 ChatParticipant(
                     chat_id=chat.id,
                     participant_id=user_id,
+                    role=(
+                        ParticipantRole.CREATOR.value
+                        if user_id == creator_id
+                        else ParticipantRole.PARTICIPANT.value
+                    ),
                 )
                 for user_id in users_id
             ]
@@ -171,10 +177,23 @@ class ChatRepository:
         stmt = select(ChatParticipant.chat_id).where(
             ChatParticipant.chat_id == chat_id,
             ChatParticipant.participant_id == user_id,
-            ChatParticipant.role == "admin",
+            ChatParticipant.role == ParticipantRole.ADMIN.value,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+    async def is_chat_creator(
+            self,
+            chat_id: int,
+            user_id: UUID,
+        ) -> bool:
+            stmt = select(ChatParticipant.chat_id).where(
+                ChatParticipant.chat_id == chat_id,
+                ChatParticipant.participant_id == user_id,
+                ChatParticipant.role == ParticipantRole.CREATOR.value,
+            )
+            result = await self.session.execute(stmt)
+            return result.scalar_one_or_none() is not None
 
     async def get_participant_for_update(
         self,
@@ -240,6 +259,21 @@ class ChatRepository:
         self.session.add_all(participants)
         await self.session.flush()
         return participants
+
+    async def delete_chat_participant(
+        self,
+        chat_id: int,
+        participant_id: UUID,
+    ) -> None:
+        stmt = (
+            delete(ChatParticipant)
+            .where(
+                ChatParticipant.chat_id == chat_id,
+                ChatParticipant.participant_id == participant_id,
+            )
+        )
+        await self.session.execute(stmt) 
+
         
 async def get_chat_repository(
     session: AsyncSession = Depends(get_session),
