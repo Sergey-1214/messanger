@@ -31,6 +31,7 @@ class ChatType(Enum):
 class ParticipantRole(Enum):
     PARTICIPANT = "participant"
     ADMIN = "admin"
+    CREATOR = "creator"
 
 
 class Chat(Base):
