@@ -1,3 +1,5 @@
+import socket
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,6 +9,11 @@ class Settings(BaseSettings):
     redis_max_connections: int = Field(default=50, ge=1)
     presence_connection_ttl_seconds: int = Field(default=60, ge=1)
     rabbitmq_url: str = "amqp://app:app-password@localhost:5672/"
+    database_url: str = "postgresql+asyncpg://app:app-password@localhost:5432/presence"
+    last_seen_consumer_name: str = Field(
+        default_factory=lambda: f"presence-service-{socket.gethostname()}",
+        min_length=1,
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
