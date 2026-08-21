@@ -9,14 +9,17 @@ from presence_service.broker.rabbitmq.exchange import declare_presence_events_ex
 from presence_service.broker.rabbitmq.producer import get_rabbitmq_producer
 from presence_service.core.logging import setup_logging
 from presence_service.core.settings import settings
+from presence_service.db.postgres.db import async_session_maker, create_all
 from presence_service.db.redis import create_redis_client
 from presence_service.exception.handler import connection_not_found_handler
 from presence_service.exception.presence import ConnectionNotFoundException
+from presence_service.expiry_worker.last_seen_consumer import get_last_seen_consumer
 from presence_service.expiry_worker.presence_expiry_worker import (
     get_presence_expiry_worker,
 )
 from presence_service.repository.lua_scripts import PresenceRedisScripts
 from presence_service.repository.presence import PresenceRepository
+from presence_service.router.last_seen import router as last_seen_router
 from presence_service.router.presence import router as presence_router
 
 setup_logging()
@@ -44,6 +47,15 @@ async def lifespan(app: FastAPI):
         )
         worker_task = asyncio.create_task(presence_expiry_worker.run())
 
+        await create_all()
+
+        last_seen_consumer = get_last_seen_consumer(
+            redis,
+            async_session_maker,
+            settings.last_seen_consumer_name,
+        )
+        last_seen_consumer_task = asyncio.create_task(last_seen_consumer.run())
+
         try:
             yield
         finally:
@@ -53,9 +65,16 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
+            last_seen_consumer_task.cancel()
+            try:
+                await last_seen_consumer_task
+            except asyncio.CancelledError:
+                pass
+
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(presence_router)
+app.include_router(last_seen_router)
 
 
 app.add_exception_handler(ConnectionNotFoundException, connection_not_found_handler)

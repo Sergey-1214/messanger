@@ -1,4 +1,5 @@
 
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -31,6 +32,7 @@ class PresenceStatusesRequest(BaseModel):
 class PresenceStatusItem(BaseModel):
     user_id: UUID
     status: PresenceStatus
+    last_seen: datetime | None = None
 
 
 class PresenceStatusesResponse(BaseModel):

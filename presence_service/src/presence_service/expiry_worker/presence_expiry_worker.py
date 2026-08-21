@@ -27,20 +27,23 @@ class PresenceExpiryWorker:
     async def run(self) -> None:
         while True:
             try:
-                offline_user_ids = (
+                offline_entries = (
                     await self._repository.expire_connections(
                         batch_size=self._batch_size,
                     )
                 )
 
-                for user_id in offline_user_ids:
-                    event = StatusOfflineEvent(user_id=user_id)
+                for user_id, occurred_at in offline_entries:
+                    event = StatusOfflineEvent(
+                        user_id=user_id,
+                        occurred_at=occurred_at,
+                    )
                     await self._producer.publish(
                         event=event,
                         routing_key=PresenceRoutingKey.STATUS_OFFLINE,
                     )
 
-                if len(offline_user_ids) < self._batch_size:
+                if len(offline_entries) < self._batch_size:
                     await asyncio.sleep(self._poll_interval)
             except asyncio.CancelledError:
                 raise

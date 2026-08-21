@@ -52,13 +52,16 @@ class PresenceService:
         self,
         request: DisconnectRequest,
     ) -> None:
-        status_changed = await self._repository.disconnect(
+        status_changed, occurred_at = await self._repository.disconnect(
             user_id=str(request.user_id),
             connection_id=request.connection_id,
         )
 
-        if status_changed:
-            event = StatusOfflineEvent(user_id=request.user_id)
+        if status_changed and occurred_at is not None:
+            event = StatusOfflineEvent(
+                user_id=request.user_id,
+                occurred_at=occurred_at,
+            )
             await self._producer.publish(
                 event=event,
                 routing_key=PresenceRoutingKey.STATUS_OFFLINE,
@@ -87,9 +90,10 @@ class PresenceService:
         request: PresenceStatusesRequest,
     ) -> PresenceStatusesResponse:
         ordered_user_ids = sorted(request.user_ids, key=str)
-        online_by_user_id = await self._repository.get_statuses(
-            [str(user_id) for user_id in ordered_user_ids]
-        )
+        user_ids = [str(user_id) for user_id in ordered_user_ids]
+
+        online_by_user_id = await self._repository.get_statuses(user_ids)
+        last_seen_by_user_id = await self._repository.get_last_seen(user_ids)
 
         return PresenceStatusesResponse(
             statuses=[
@@ -99,6 +103,11 @@ class PresenceService:
                         PresenceStatus.ONLINE
                         if online_by_user_id[str(user_id)]
                         else PresenceStatus.OFFLINE
+                    ),
+                    last_seen=(
+                        None
+                        if online_by_user_id[str(user_id)]
+                        else last_seen_by_user_id.get(str(user_id))
                     ),
                 )
                 for user_id in ordered_user_ids
