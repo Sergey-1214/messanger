@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any
 
@@ -9,6 +10,18 @@ from presence_service.db.redis import get_redis
 
 
 PRESENCE_USERS_NEXT_EXPIRY_KEY = "presence:users:next-expiry"
+PRESENCE_LAST_SEEN_STREAM_KEY = "presence:last-seen"
+PRESENCE_LAST_SEEN_HASH_KEY = "presence:users:last-seen"
+
+
+def redis_time_to_datetime(
+    seconds: str | int,
+    microseconds: str | int,
+) -> datetime:
+    return datetime.fromtimestamp(
+        int(seconds) + int(microseconds) / 1_000_000,
+        tz=timezone.utc,
+    )
 
 
 class ScriptName(StrEnum):
@@ -101,10 +114,27 @@ else
 end
 
 if (removed_expired > 0 or removed > 0) and connection_count == 0 then
-    return 1
+    redis.call(
+        "XADD",
+        KEYS[3],
+        "*",
+        "user_id",
+        ARGV[2],
+        "last_seen_seconds",
+        redis_time[1],
+        "last_seen_microseconds",
+        redis_time[2]
+    )
+    redis.call(
+        "HSET",
+        KEYS[4],
+        ARGV[2],
+        redis_time[1] .. "." .. redis_time[2]
+    )
+    return {1, redis_time[1], redis_time[2]}
 end
 
-return 0
+return {0, redis_time[1], redis_time[2]}
 """
 
 
@@ -158,11 +188,11 @@ local indexed_expiry = redis.call(
 )
 
 if not indexed_expiry then
-    return 0
+    return {0, redis_time[1], redis_time[2]}
 end
 
 if tonumber(indexed_expiry) > now then
-    return 0
+    return {0, redis_time[1], redis_time[2]}
 end
 
 redis.call(
@@ -188,7 +218,7 @@ if #next_connection > 0 then
         ARGV[1]
     )
 
-    return 0
+    return {0, redis_time[1], redis_time[2]}
 end
 
 redis.call(
@@ -197,7 +227,26 @@ redis.call(
     ARGV[1]
 )
 
-return 1
+redis.call(
+    "XADD",
+    KEYS[3],
+    "*",
+    "user_id",
+    ARGV[1],
+    "last_seen_seconds",
+    redis_time[1],
+    "last_seen_microseconds",
+    redis_time[2]
+)
+
+redis.call(
+    "HSET",
+    KEYS[4],
+    ARGV[1],
+    redis_time[1] .. "." .. redis_time[2]
+)
+
+return {1, redis_time[1], redis_time[2]}
 """
 
 
@@ -265,7 +314,7 @@ class PresenceRedisScripts:
         self,
         user_id: str,
         connection_id: str,
-    ) -> bool:
+    ) -> tuple[bool, datetime | None]:
         user_key = (
             f"presence:user:{user_id}:connections"
         )
@@ -275,6 +324,8 @@ class PresenceRedisScripts:
             keys=[
                 user_key,
                 PRESENCE_USERS_NEXT_EXPIRY_KEY,
+                PRESENCE_LAST_SEEN_STREAM_KEY,
+                PRESENCE_LAST_SEEN_HASH_KEY,
             ],
             args=[
                 connection_id,
@@ -282,7 +333,14 @@ class PresenceRedisScripts:
             ],
         )
 
-        return result == 1
+        status_changed = result[0] == 1
+        occurred_at = (
+            redis_time_to_datetime(result[1], result[2])
+            if status_changed
+            else None
+        )
+
+        return status_changed, occurred_at
 
     async def heartbeat(
         self,
@@ -312,7 +370,7 @@ class PresenceRedisScripts:
     async def expire_connections(
         self,
         user_id: str,
-    ) -> bool:
+    ) -> tuple[bool, datetime | None]:
         user_key = (
             f"presence:user:{user_id}:connections"
         )
@@ -322,13 +380,22 @@ class PresenceRedisScripts:
             keys=[
                 PRESENCE_USERS_NEXT_EXPIRY_KEY,
                 user_key,
+                PRESENCE_LAST_SEEN_STREAM_KEY,
+                PRESENCE_LAST_SEEN_HASH_KEY,
             ],
             args=[
                 user_id,
             ],
         )
 
-        return result == 1
+        status_changed = result[0] == 1
+        occurred_at = (
+            redis_time_to_datetime(result[1], result[2])
+            if status_changed
+            else None
+        )
+
+        return status_changed, occurred_at
 
 
 def get_presence_scripts(

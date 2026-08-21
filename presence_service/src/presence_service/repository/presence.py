@@ -1,12 +1,16 @@
+from datetime import datetime
+
 from fastapi import Depends
 from redis.asyncio import Redis
 
 from presence_service.db.redis import get_redis
 from presence_service.dto.presence import AddConnectionResult, HeartbeatResult
 from presence_service.repository.lua_scripts import (
+    PRESENCE_LAST_SEEN_HASH_KEY,
     PRESENCE_USERS_NEXT_EXPIRY_KEY,
     PresenceRedisScripts,
     get_presence_scripts,
+    redis_time_to_datetime,
 )
 
 
@@ -38,7 +42,7 @@ class PresenceRepository:
         self,
         user_id: str,
         connection_id: str,
-    ) -> bool:
+    ) -> tuple[bool, datetime | None]:
         return await self._scripts.disconnect(
             user_id=user_id,
             connection_id=connection_id,
@@ -87,10 +91,37 @@ class PresenceRepository:
             )
         }
 
+    async def get_last_seen(
+        self,
+        user_ids: list[str],
+    ) -> dict[str, datetime | None]:
+        if not user_ids:
+            return {}
+
+        raw_values = await self._redis.hmget(
+            PRESENCE_LAST_SEEN_HASH_KEY,
+            user_ids,
+        )
+
+        result: dict[str, datetime | None] = {}
+
+        for user_id, value in zip(user_ids, raw_values, strict=True):
+            if value is None:
+                result[user_id] = None
+                continue
+
+            seconds, microseconds = value.split(".")
+            result[user_id] = redis_time_to_datetime(
+                seconds,
+                microseconds,
+            )
+
+        return result
+
     async def expire_connections(
         self,
         batch_size: int = 100,
-    ) -> list[str]:
+    ) -> list[tuple[str, datetime]]:
         if batch_size < 1:
             raise ValueError("batch_size must be greater than zero")
 
@@ -105,7 +136,7 @@ class PresenceRepository:
             num=batch_size,
         )
 
-        offline_user_ids: list[str] = []
+        offline_entries: list[tuple[str, datetime]] = []
 
         for raw_user_id in due_user_ids:
             user_id = (
@@ -114,14 +145,14 @@ class PresenceRepository:
                 else str(raw_user_id)
             )
 
-            became_offline = await self._scripts.expire_connections(
+            became_offline, occurred_at = await self._scripts.expire_connections(
                 user_id=user_id,
             )
 
-            if became_offline:
-                offline_user_ids.append(user_id)
+            if became_offline and occurred_at is not None:
+                offline_entries.append((user_id, occurred_at))
 
-        return offline_user_ids
+        return offline_entries
 
 
 def get_presence_repository(
