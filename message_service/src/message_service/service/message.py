@@ -1,5 +1,6 @@
 from uuid import UUID, uuid4
 
+from datetime import datetime, timezone
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +51,7 @@ class MessageService:
                 )
 
             chat.last_message_seq += 1
+            chat.last_message_at = datetime.now(timezone.utc)
             message = await self.message_repo.create_message(
                 chat_id=chat_id,
                 author_id=author_id,
