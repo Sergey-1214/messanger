@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from datetime import datetime, timezone
 from fastapi import Depends
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,8 +26,14 @@ class ChatRepository:
         is_private: bool,
         title: str | None,
     ) -> Chat:
+        now = datetime.now(timezone.utc)
         async with self.session.begin():
-            chat = Chat(type=chat_type, is_private=is_private, title=title)
+            chat = Chat(
+                type=chat_type,
+                is_private=is_private,
+                title=title,
+                last_message_at=now,
+            )
             self.session.add(chat)
             await self.session.flush()
 
@@ -51,7 +58,7 @@ class ChatRepository:
                 .where(ChatParticipant.participant_id == user_id)\
                 .offset(offset=offset)\
                 .limit(limit=limit)\
-                .order_by(Chat.id)
+                .order_by(Chat.last_message_at.desc().nullslast(), Chat.id.desc())
         
         chat_result = await self.session.execute(stmt)
         chats = chat_result.scalars().all()
@@ -272,7 +279,26 @@ class ChatRepository:
                 ChatParticipant.participant_id == participant_id,
             )
         )
-        await self.session.execute(stmt) 
+        await self.session.execute(stmt)
+
+    async def check_private_chat_exist(
+        self,
+        users_id: set[UUID],
+    ) -> bool:
+        user_list = list(users_id)
+        stmt = select(Chat.id)\
+                .join(ChatParticipant)\
+                .where(
+                    Chat.type == ChatType.PRIVATE,
+                    ChatParticipant.participant_id.in_(user_list)
+                ).group_by(Chat.id)\
+                .having(func.count(ChatParticipant.participant_id) == len(user_list))
+
+        result = await self.session.execute(stmt)
+        chat = result.scalar_one_or_none()
+    
+        return chat is not None
+                
 
         
 async def get_chat_repository(
