@@ -1,9 +1,10 @@
 
 
 from datetime import datetime
+from typing import Self
 import uuid
 
-from pydantic import BaseModel, EmailStr, SecretStr
+from pydantic import BaseModel, EmailStr, SecretStr, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -12,9 +13,14 @@ class RegisterRequest(BaseModel):
     password: SecretStr
 
 class LoginRequest(BaseModel):
-    username: str
-    email: EmailStr
+    username: str | None = None
+    email: EmailStr | None = None
     password: SecretStr
+    @model_validator(mode="after")
+    def validate_content(self) -> Self:
+        if not self.username and not self.email:
+            raise ValueError("Username or email is required")
+        return self
 
 class UserDTO(BaseModel):
     id: uuid.UUID

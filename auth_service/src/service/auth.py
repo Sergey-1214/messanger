@@ -78,7 +78,10 @@ class AuthService:
     
     
     async def login(self, request: LoginRequest) -> TokenPair:
-        user = await self.repo.get_user_by_email(request.email)
+        if not request.email:
+            user = await self.repo.get_user_by_username(request.username)
+        else:
+            user = await self.repo.get_user_by_email(request.email)
 
         if user is None or not verify_password(request.password.get_secret_value(), user.password_hash):
             raise UnauthorizedException()
