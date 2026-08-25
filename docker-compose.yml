@@ -9,6 +9,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -20,7 +21,7 @@ services:
     build:
       context: ./auth_service
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/${POSTGRES_DB:-messenger}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/auth_db
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
     ports:
       - "${AUTH_SERVICE_PORT:-8000}:8000"
@@ -33,7 +34,7 @@ services:
     build:
       context: ./message_service
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/${POSTGRES_DB:-messenger}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/message_db
       AUTH_SERVICE_URL: http://auth_service:8000
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-password}@rabbitmq:5672/
     ports:
@@ -71,13 +72,14 @@ services:
     build:
       context: ./presence_service
     environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/presence_db
       REDIS_URL: redis://presence_redis:6379/0
       REDIS_MAX_CONNECTIONS: ${PRESENCE_REDIS_MAX_CONNECTIONS:-50}
       PRESENCE_CONNECTION_TTL_SECONDS: ${PRESENCE_CONNECTION_TTL_SECONDS:-60}
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-app}:${RABBITMQ_PASSWORD:-app-password}@rabbitmq:5672/
-    ports:
-      - "${PRESENCE_SERVICE_PORT:-8003}:8000"
     depends_on:
+      postgres:
+        condition: service_healthy
       presence_redis:
         condition: service_healthy
       rabbitmq:
@@ -86,14 +88,25 @@ services:
 
   presence_redis:
     image: redis:8-alpine
-    ports:
-      - "${PRESENCE_REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
+    restart: unless-stopped
+
+  user_service:
+    build:
+      context: ./user_service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-messenger}:${POSTGRES_PASSWORD:-messenger}@postgres:5432/user_db
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+    ports:
+      - "${USER_SERVICE_PORT:-8004}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   rabbitmq:
@@ -113,6 +126,34 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      auth_service:
+        condition: service_started
+      message_service:
+        condition: service_started
+      realtime_gateway:
+        condition: service_started
+      user_service:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      gateway:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
