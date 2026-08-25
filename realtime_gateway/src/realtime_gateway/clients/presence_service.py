@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 class PresenceStatusItem(BaseModel):
     user_id: UUID
     status: Literal["online", "offline"]
+    last_seen: datetime | None = None
 
 
 class PresenceStatusesResponse(BaseModel):

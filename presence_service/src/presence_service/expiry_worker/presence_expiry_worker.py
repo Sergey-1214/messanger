@@ -33,10 +33,11 @@ class PresenceExpiryWorker:
                     )
                 )
 
-                for user_id, occurred_at in offline_entries:
+                for user_id, occurred_at, version in offline_entries:
                     event = StatusOfflineEvent(
                         user_id=user_id,
                         occurred_at=occurred_at,
+                        version=version,
                     )
                     await self._producer.publish(
                         event=event,

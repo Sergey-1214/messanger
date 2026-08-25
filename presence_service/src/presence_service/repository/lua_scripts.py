@@ -12,6 +12,7 @@ from presence_service.db.redis import get_redis
 PRESENCE_USERS_NEXT_EXPIRY_KEY = "presence:users:next-expiry"
 PRESENCE_LAST_SEEN_STREAM_KEY = "presence:last-seen"
 PRESENCE_LAST_SEEN_HASH_KEY = "presence:users:last-seen"
+PRESENCE_VERSION_HASH_KEY = "presence:users:version"
 
 
 def redis_time_to_datetime(
@@ -72,7 +73,7 @@ if connection_count == 1 and added == 1 then
     status_changed = 1
 end
 
-return {status_changed, connection_count}
+return {status_changed, connection_count, redis.call("HINCRBY", KEYS[3], ARGV[3], 1)}
 """
 
 
@@ -131,10 +132,12 @@ if (removed_expired > 0 or removed > 0) and connection_count == 0 then
         ARGV[2],
         redis_time[1] .. "." .. redis_time[2]
     )
-    return {1, redis_time[1], redis_time[2]}
+    local version = redis.call("HINCRBY", KEYS[5], ARGV[2], 1)
+    return {1, redis_time[1], redis_time[2], version}
 end
 
-return {0, redis_time[1], redis_time[2]}
+local version = redis.call("HINCRBY", KEYS[5], ARGV[2], 1)
+return {0, redis_time[1], redis_time[2], version}
 """
 
 
@@ -188,11 +191,13 @@ local indexed_expiry = redis.call(
 )
 
 if not indexed_expiry then
-    return {0, redis_time[1], redis_time[2]}
+    local version = redis.call("HINCRBY", KEYS[5], ARGV[1], 1)
+    return {0, redis_time[1], redis_time[2], version}
 end
 
 if tonumber(indexed_expiry) > now then
-    return {0, redis_time[1], redis_time[2]}
+    local version = redis.call("HINCRBY", KEYS[5], ARGV[1], 1)
+    return {0, redis_time[1], redis_time[2], version}
 end
 
 redis.call(
@@ -218,7 +223,8 @@ if #next_connection > 0 then
         ARGV[1]
     )
 
-    return {0, redis_time[1], redis_time[2]}
+    local version = redis.call("HINCRBY", KEYS[5], ARGV[1], 1)
+    return {0, redis_time[1], redis_time[2], version}
 end
 
 redis.call(
@@ -246,7 +252,8 @@ redis.call(
     redis_time[1] .. "." .. redis_time[2]
 )
 
-return {1, redis_time[1], redis_time[2]}
+local version = redis.call("HINCRBY", KEYS[5], ARGV[1], 1)
+return {1, redis_time[1], redis_time[2], version}
 """
 
 
@@ -290,16 +297,17 @@ class PresenceRedisScripts:
         user_id: str,
         connection_id: str,
         ttl_seconds: int,
-    ) -> tuple[bool, int]:
+    ) -> tuple[bool, int, int]:
         user_key = (
             f"presence:user:{user_id}:connections"
         )
 
-        status_changed, active_connections = await self._execute(
+        result = await self._execute(
             ScriptName.ADD_CONNECTION,
             keys=[
                 user_key,
                 PRESENCE_USERS_NEXT_EXPIRY_KEY,
+                PRESENCE_VERSION_HASH_KEY,
             ],
             args=[
                 connection_id,
@@ -308,13 +316,17 @@ class PresenceRedisScripts:
             ],
         )
 
-        return status_changed == 1, int(active_connections)
+        status_changed = result[0] == 1
+        active_connections = int(result[1])
+        version = int(result[2])
+
+        return status_changed, active_connections, version
 
     async def disconnect(
         self,
         user_id: str,
         connection_id: str,
-    ) -> tuple[bool, datetime | None]:
+    ) -> tuple[bool, datetime | None, int]:
         user_key = (
             f"presence:user:{user_id}:connections"
         )
@@ -326,6 +338,7 @@ class PresenceRedisScripts:
                 PRESENCE_USERS_NEXT_EXPIRY_KEY,
                 PRESENCE_LAST_SEEN_STREAM_KEY,
                 PRESENCE_LAST_SEEN_HASH_KEY,
+                PRESENCE_VERSION_HASH_KEY,
             ],
             args=[
                 connection_id,
@@ -339,8 +352,9 @@ class PresenceRedisScripts:
             if status_changed
             else None
         )
+        version = int(result[3])
 
-        return status_changed, occurred_at
+        return status_changed, occurred_at, version
 
     async def heartbeat(
         self,
@@ -370,7 +384,7 @@ class PresenceRedisScripts:
     async def expire_connections(
         self,
         user_id: str,
-    ) -> tuple[bool, datetime | None]:
+    ) -> tuple[bool, datetime | None, int]:
         user_key = (
             f"presence:user:{user_id}:connections"
         )
@@ -382,6 +396,7 @@ class PresenceRedisScripts:
                 user_key,
                 PRESENCE_LAST_SEEN_STREAM_KEY,
                 PRESENCE_LAST_SEEN_HASH_KEY,
+                PRESENCE_VERSION_HASH_KEY,
             ],
             args=[
                 user_id,
@@ -394,8 +409,9 @@ class PresenceRedisScripts:
             if status_changed
             else None
         )
+        version = int(result[3])
 
-        return status_changed, occurred_at
+        return status_changed, occurred_at, version
 
 
 def get_presence_scripts(
