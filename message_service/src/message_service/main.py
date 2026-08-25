@@ -9,8 +9,8 @@ from message_service.broker.rabbitmq.exchanges import declare_chat_events_exchan
 from message_service.broker.rabbitmq.producer import get_rabbitmq_producer
 from message_service.core.settings import settings
 from message_service.db.db import Base, Session, engine
-from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
-from message_service.exception.handler import bad_request_exception_exception, forbidden_exception_exception, unauthorized_exception, chat_not_found_handler, message_not_found_handler
+from message_service.exception.chat import BadRequestException, ChatAlreadyExistException, ChatNotFoundException, ForbiddenException, UnauthorizedException
+from message_service.exception.handler import bad_request_exception_exception, chat_already_exist_exception, forbidden_exception_exception, unauthorized_exception, chat_not_found_handler, message_not_found_handler
 from message_service.exception.message import MessageNotFoundException
 from message_service.router.chat import router as chat_router
 from message_service.router.messages import router as messages_router
@@ -65,3 +65,4 @@ app.add_exception_handler(BadRequestException, bad_request_exception_exception)
 app.add_exception_handler(ForbiddenException, forbidden_exception_exception)
 app.add_exception_handler(ChatNotFoundException, chat_not_found_handler)
 app.add_exception_handler(MessageNotFoundException, message_not_found_handler)
+app.add_exception_handler(ChatAlreadyExistException, chat_already_exist_exception)
