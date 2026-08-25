@@ -76,6 +76,12 @@ class Participant(BaseModel):
 class UserChats(BaseModel):
     private_chats: list[PrivateChat]
     group_chats: list[GroupChat]
+
+
+class ChatParticipantResponse(BaseModel):
+    user_id: UUID
+    username: str
+    role: str
     
 
 class AddChatParticipantsRequest(BaseModel):

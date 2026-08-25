@@ -35,3 +35,11 @@ class ChatNotFoundException(AppException):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=detail
         )
+
+
+class ChatAlreadyExistException(AppException):
+    def __init__(self, detail: str):
+        super().__init__(
+            detail=detail,
+            status_code=status.HTTP_409_CONFLICT,
+        )
