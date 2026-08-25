@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.schemas.auth import GetUsersBatchRequest, GetUsersBatchResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, TokenPair, UserDTO
@@ -37,6 +37,16 @@ async def get_current_user_id(
             detail="Invalid token payload"
         )
     return user_id
+
+@auth_router.api_route(
+    "/verify",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    status_code=status.HTTP_200_OK,
+)
+async def verify_token(
+    current_user_id: uuid.UUID = Depends(get_current_user_id),
+) -> Response:
+    return Response(headers={"X-User-Id": str(current_user_id)})
 
 
 @auth_router.post("/register", status_code=status.HTTP_201_CREATED)
