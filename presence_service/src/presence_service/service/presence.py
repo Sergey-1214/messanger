@@ -40,7 +40,10 @@ class PresenceService:
         )
 
         if result.status_changed:
-            event = StatusOnlineEvent(user_id=request.user_id)
+            event = StatusOnlineEvent(
+                user_id=request.user_id,
+                version=result.version,
+            )
             await self._producer.publish(
                 event=event,
                 routing_key=PresenceRoutingKey.STATUS_ONLINE,
@@ -52,7 +55,7 @@ class PresenceService:
         self,
         request: DisconnectRequest,
     ) -> None:
-        status_changed, occurred_at = await self._repository.disconnect(
+        status_changed, occurred_at, version = await self._repository.disconnect(
             user_id=str(request.user_id),
             connection_id=request.connection_id,
         )
@@ -61,6 +64,7 @@ class PresenceService:
             event = StatusOfflineEvent(
                 user_id=request.user_id,
                 occurred_at=occurred_at,
+                version=version,
             )
             await self._producer.publish(
                 event=event,
