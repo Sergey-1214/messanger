@@ -55,6 +55,11 @@ class Chat(Base):
         server_default=text("0"),
     )
 
+    last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
