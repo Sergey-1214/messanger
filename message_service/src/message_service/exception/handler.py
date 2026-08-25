@@ -3,7 +3,7 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
-from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException, UnauthorizedException
+from message_service.exception.chat import BadRequestException, ChatAlreadyExistException, ChatNotFoundException, ForbiddenException, UnauthorizedException
 from message_service.exception.message import MessageNotFoundException
 
 
@@ -54,3 +54,12 @@ async def forbidden_exception_exception(
         content={"detail": exc.detail},
     )
 
+
+async def chat_already_exist_exception(
+    request: Request,
+    exc: ChatAlreadyExistException,
+):
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": exc.detail}
+    )
