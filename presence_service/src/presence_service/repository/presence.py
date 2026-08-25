@@ -25,7 +25,7 @@ class PresenceRepository:
         connection_id: str,
         ttl_seconds: int,
     ) -> AddConnectionResult:
-        status_changed, active_connections = (
+        status_changed, active_connections, version = (
             await self._scripts.add_connection(
                 user_id=user_id,
                 connection_id=connection_id,
@@ -36,13 +36,14 @@ class PresenceRepository:
         return AddConnectionResult(
             status_changed=status_changed,
             active_connections=active_connections,
+            version=version,
         )
 
     async def disconnect(
         self,
         user_id: str,
         connection_id: str,
-    ) -> tuple[bool, datetime | None]:
+    ) -> tuple[bool, datetime | None, int]:
         return await self._scripts.disconnect(
             user_id=user_id,
             connection_id=connection_id,
@@ -121,7 +122,7 @@ class PresenceRepository:
     async def expire_connections(
         self,
         batch_size: int = 100,
-    ) -> list[tuple[str, datetime]]:
+    ) -> list[tuple[str, datetime, int]]:
         if batch_size < 1:
             raise ValueError("batch_size must be greater than zero")
 
@@ -136,7 +137,7 @@ class PresenceRepository:
             num=batch_size,
         )
 
-        offline_entries: list[tuple[str, datetime]] = []
+        offline_entries: list[tuple[str, datetime, int]] = []
 
         for raw_user_id in due_user_ids:
             user_id = (
@@ -145,12 +146,12 @@ class PresenceRepository:
                 else str(raw_user_id)
             )
 
-            became_offline, occurred_at = await self._scripts.expire_connections(
+            became_offline, occurred_at, version = await self._scripts.expire_connections(
                 user_id=user_id,
             )
 
             if became_offline and occurred_at is not None:
-                offline_entries.append((user_id, occurred_at))
+                offline_entries.append((user_id, occurred_at, version))
 
         return offline_entries
 
