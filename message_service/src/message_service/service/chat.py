@@ -8,13 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from message_service.clients.user_client import UserClient, get_user_client
 from message_service.db.db import get_session
-from message_service.exception.chat import BadRequestException, ChatNotFoundException, ForbiddenException
+from message_service.exception.chat import BadRequestException, ChatAlreadyExistException, ChatNotFoundException, ForbiddenException
 from message_service.models.models import Chat, ChatType
 from message_service.repository.chat import ChatRepository, get_chat_repository
 from message_service.schemas.chat import (
     CreateChatRequest,
     AddChatParticipantError,
     AddChatParticipantsResponse,
+    ChatParticipantResponse,
     GroupChat,
     Pagination,
     PrivateChat,
@@ -42,6 +43,9 @@ class ChatService:
 
         if len(request.users_id) > 10000:
             raise BadRequestException("Too much users for chat")
+
+        if request.type == ChatType.PRIVATE and self.repo.check_private_chat_exist(users_id=request.users_id):
+            raise ChatAlreadyExistException("Private chat with this user already exist")
             
         chat = await self.repo.create_chat(
             creator_id=user_id,
@@ -133,6 +137,40 @@ class ChatService:
                 participants_count=chat_item.participants_count,
                 last_message=chat_item.last_message,
             )
+
+    async def get_participants(
+        self,
+        chat_id: int,
+        user_id: UUID,
+    ) -> list[ChatParticipantResponse]:
+        chat = await self.repo.get_chat_by_id(chat_id=chat_id)
+        if chat is None:
+            raise ChatNotFoundException("Chat not found")
+
+        is_participant = any(
+            p.participant_id == user_id for p in chat.chat_participants
+        )
+        if not is_participant:
+            raise ForbiddenException(detail="You are not a participant of this chat")
+
+        participant_ids = [
+            p.participant_id for p in chat.chat_participants
+        ]
+        users = await self.user_client.get_users_by_ids(set(participant_ids))
+        users_by_id = {u.user_id: u for u in users}
+        roles_by_id = {
+            p.participant_id: p.role for p in chat.chat_participants
+        }
+
+        return [
+            ChatParticipantResponse(
+                user_id=pid,
+                username=users_by_id[pid].username,
+                role=roles_by_id.get(pid, "participant"),
+            )
+            for pid in participant_ids
+            if pid in users_by_id
+        ]
 
     async def add_chat_participant(
         self,
