@@ -7,6 +7,7 @@ from enum import Enum, IntEnum
 class AddConnectionResult:
     status_changed: bool
     active_connections: int
+    version: int
 
 
 class HeartbeatResult(IntEnum):
