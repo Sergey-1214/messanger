@@ -13,4 +13,5 @@ class PresenceStatusEvent(BaseModel):
     ]
     occurred_at: datetime
     user_id: UUID
+    version: int
     correlation_id: UUID
