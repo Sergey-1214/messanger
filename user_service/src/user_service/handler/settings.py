@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
+from user_service.handler.dependencies import VerifiedUserIdDep
 from user_service.schemas.settings import Settings, SettingsUpdateRequest
 from user_service.service.settings import SettingsService, get_settings_service
 
@@ -27,7 +28,7 @@ async def get_settings(
     status_code=status.HTTP_200_OK,
 )
 async def update_settings(
-    user_id: UUID,
+    user_id: VerifiedUserIdDep,
     request: SettingsUpdateRequest,
     service: SettingsService = Depends(get_settings_service),
 ) -> Settings:
@@ -39,7 +40,7 @@ async def update_settings(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def clear_settings(
-    user_id: UUID,
+    user_id: VerifiedUserIdDep,
     service: SettingsService = Depends(get_settings_service),
 ) -> None:
     await service.clear_settings(user_id=user_id)
